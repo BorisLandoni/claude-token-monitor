@@ -60,6 +60,9 @@ def process_account_limits(limits: dict):
         'credits_limit_eur':    _keep('credits_limit_eur'),
         'credits_balance_eur':  _keep('credits_balance_eur'),
         'credits_reset_label':  _keep('credits_reset_label'),
+        # Routine giornaliere (DOM scrape only — preserved across fast polls)
+        'routines_used':        _keep('routines_used'),
+        'routines_limit':       _keep('routines_limit'),
         # Meta
         'plan':           limits.get('plan', 'pro'),
         'session_status': 'ok',
