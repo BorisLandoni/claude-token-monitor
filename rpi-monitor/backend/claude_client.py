@@ -284,27 +284,102 @@ class ClaudeClient:
             opts['executable_path'] = CHROMIUM_PATH
         return opts
 
+    # ── Cookie import (bypass Cloudflare/magic-link) ─────────────────────────
+    def import_cookies_from_text(self, text: str) -> tuple[int, str]:
+        """
+        Importa cookie da:
+          - comando cURL (con -H 'Cookie: ...' o -b '...')
+          - stringa raw 'name=value; name=value'
+          - array JSON Playwright-style
+        Salva in cookies.json. Ritorna (numero_cookie, messaggio).
+        """
+        text = (text or '').strip()
+        if not text:
+            return 0, 'Testo vuoto'
+
+        cookies: list[dict] = []
+
+        # Tentativo 1: JSON array (formato Playwright/export)
+        if text.startswith('['):
+            try:
+                data = json.loads(text)
+                if isinstance(data, list):
+                    for c in data:
+                        if 'name' in c and 'value' in c:
+                            cookies.append({
+                                'name':     c['name'],
+                                'value':    c['value'],
+                                'domain':   c.get('domain', '.claude.ai'),
+                                'path':     c.get('path', '/'),
+                                'httpOnly': c.get('httpOnly', True),
+                                'secure':   c.get('secure', True),
+                                'sameSite': c.get('sameSite', 'Lax'),
+                            })
+            except Exception:
+                pass
+
+        # Tentativo 2: cURL → estrai header Cookie
+        if not cookies:
+            cookie_str = None
+            for pat in (
+                r"-H\s+['\"]Cookie:\s*([^'\"]+)['\"]",        # -H 'Cookie: xxx'
+                r"-H\s+\^?\"Cookie:\s*([^\"]+)\"",            # -H "Cookie: xxx"
+                r"--cookie\s+['\"]([^'\"]+)['\"]",            # --cookie 'xxx'
+                r"-b\s+['\"]([^'\"]+)['\"]",                  # -b 'xxx'
+            ):
+                m = re.search(pat, text, re.IGNORECASE | re.DOTALL)
+                if m:
+                    cookie_str = m.group(1)
+                    break
+
+            # Tentativo 3: assume stringa raw "name=value; ..."
+            if not cookie_str and '=' in text and ';' in text:
+                cookie_str = text
+
+            if cookie_str:
+                for pair in cookie_str.split(';'):
+                    pair = pair.strip()
+                    if '=' not in pair:
+                        continue
+                    name, value = pair.split('=', 1)
+                    name, value = name.strip(), value.strip()
+                    if not name or not value:
+                        continue
+                    cookies.append({
+                        'name':     name,
+                        'value':    value,
+                        'domain':   '.claude.ai',
+                        'path':     '/',
+                        'httpOnly': True,
+                        'secure':   True,
+                        'sameSite': 'Lax',
+                    })
+
+        if not cookies:
+            return 0, 'Nessun cookie trovato. Controlla il formato.'
+
+        # Cerca il cookie di sessione (sessionKey/lastActiveOrg/etc)
+        has_session = any(c['name'].lower() in ('sessionkey', '__secure-next-auth.session-token')
+                          or 'session' in c['name'].lower()
+                          for c in cookies)
+
+        COOKIES_FILE.write_text(json.dumps(cookies))
+        msg = f'{len(cookies)} cookie importati'
+        if not has_session:
+            msg += ' (attenzione: nessun cookie di sessione riconosciuto)'
+        return len(cookies), msg
+
     # ── Login (one-time) ──────────────────────────────────────────────────────
 
     async def login_playwright(self, email: str, password: str) -> tuple[bool, str]:
-        """
-        Log in to claude.ai.
-        - Se password fornita → login classico email+password (headless).
-        - Se password vuota  → magic link: apre finestra visibile, compila
-          l'email e aspetta fino a 5 minuti che l'utente incolli il link
-          dall'email nella barra degli indirizzi della finestra aperta.
-        """
+        """Log in to claude.ai (email + password). Per account senza password
+        usare invece import_cookies_from_text() con cookie esportati da Chrome."""
         if not HAS_PLAYWRIGHT:
             return False, 'Playwright non installato. Esegui: pip install playwright && playwright install chromium'
-
-        magic_link_mode = not password.strip()
 
         try:
             async with async_playwright() as pw:
                 launch_opts = self._make_playwright_launch_opts()
-                if magic_link_mode:
-                    launch_opts['headless'] = False   # finestra visibile
-
                 browser = await pw.chromium.launch(**launch_opts)
                 ctx = await browser.new_context(
                     user_agent=_BROWSER_HEADERS['User-Agent'],
@@ -349,48 +424,20 @@ class ClaudeClient:
                 except Exception as e:
                     print(f'[login] email step: {e}')
 
-                if magic_link_mode:
-                    # Mostra istruzioni nella finestra Playwright
-                    print('[login] modalita magic link — in attesa che utente clicchi il link...')
-                    await page.evaluate("""() => {
-                        const d = document.createElement('div');
-                        d.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:99999;
-                            background:#0D1E2E;color:#E2F0FF;padding:18px 24px;
-                            border-bottom:2px solid #00C8FF;font-family:sans-serif;
-                            font-size:15px;line-height:1.6;`;
-                        d.innerHTML = `
-                            <b style="color:#00C8FF">CLAUDE MONITOR — Magic Link Login</b><br>
-                            Hai ricevuto un'email da Anthropic con un link di accesso.<br>
-                            <b>Copia il link dall'email e incollalo nella barra degli indirizzi
-                            di questa finestra.</b><br>
-                            <small style="color:#5A7FA0">La finestra si chiuderà automaticamente al completamento.</small>`;
-                        document.body.prepend(d);
-                    }""")
-                    # Attendi fino a 5 minuti che l'URL cambi a claude.ai (login OK)
-                    try:
-                        await page.wait_for_url(
-                            lambda url: 'claude.ai' in url and '/login' not in url,
-                            timeout=300_000
-                        )
-                        await page.wait_for_load_state('networkidle', timeout=15_000)
-                    except Exception:
-                        pass
-                    await page.wait_for_timeout(2000)
-                else:
-                    # Step 3: fill password
-                    try:
-                        await page.locator('input[type="password"]').first.fill(password)
-                        await page.keyboard.press('Enter')
-                    except Exception as e:
-                        print(f'[login] password step: {e}')
+                # Step 3: fill password
+                try:
+                    await page.locator('input[type="password"]').first.fill(password)
+                    await page.keyboard.press('Enter')
+                except Exception as e:
+                    print(f'[login] password step: {e}')
 
-                    # Step 4: wait for redirect
-                    try:
-                        await page.wait_for_url('https://claude.ai/**', timeout=30_000)
-                        await page.wait_for_load_state('networkidle', timeout=15_000)
-                    except Exception:
-                        pass
-                    await page.wait_for_timeout(2000)
+                # Step 4: wait for redirect
+                try:
+                    await page.wait_for_url('https://claude.ai/**', timeout=30_000)
+                    await page.wait_for_load_state('networkidle', timeout=15_000)
+                except Exception:
+                    pass
+                await page.wait_for_timeout(2000)
 
                 # Step 5: navigate to settings/utilizzo to get usage data
                 try:
