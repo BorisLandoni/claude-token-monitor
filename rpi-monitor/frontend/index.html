@@ -238,6 +238,35 @@ body { background: var(--bg); color: var(--text); }
 .nav-icon  { font-size:16px; line-height:1; }
 .nav-label { font-size:10px; font-weight:600; letter-spacing:.8px; }
 
+/* ── Session Timeline ────────────────────────────────────────────────────── */
+.timeline-section { width:320px; margin-top:6px; }
+.tl-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:5px; }
+.tl-bar   { height:10px; background:var(--surface2); border-radius:5px; overflow:hidden; }
+.tl-fill  { height:100%; border-radius:5px; transition:width .9s ease, background .4s ease; }
+.tl-times { display:flex; justify-content:space-between; margin-top:4px; font-size:10px; color:var(--muted2); }
+
+/* ── Sparkline ───────────────────────────────────────────────────────────── */
+.sparkline-section { width:320px; margin-top:6px; }
+.sp-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:5px; }
+#sparkline { display:block; width:320px; height:38px; }
+
+/* ── Alert basso utilizzo ────────────────────────────────────────────────── */
+#alert-overlay {
+  position:fixed; inset:0; z-index:1000;
+  background:rgba(255,68,85,.06); border:3px solid var(--red);
+  display:none; align-items:center; justify-content:center;
+  flex-direction:column; gap:12px; cursor:pointer;
+  animation:alert-pulse 1.0s ease-in-out infinite;
+}
+#alert-overlay.show { display:flex; }
+@keyframes alert-pulse {
+  0%,100% { box-shadow:inset 0 0 50px rgba(255,68,85,.12); }
+  50%      { box-shadow:inset 0 0 110px rgba(255,68,85,.38); }
+}
+.alert-icon  { font-size:52px; line-height:1; color:var(--red); }
+.alert-title { font-size:24px; font-weight:800; color:var(--red); letter-spacing:1.5px; }
+.alert-body  { font-size:13px; color:var(--muted); text-align:center; }
+
 /* ── Loading overlay ─────────────────────────────────────────────────────── */
 #overlay {
   position:fixed; inset:0; background:rgba(7,17,28,.88);
@@ -318,6 +347,24 @@ body { background: var(--bg); color: var(--text); }
       </div>
 
       <div id="countdown" class="gauge-countdown">—</div>
+
+      <!-- Timeline sessione -->
+      <div class="timeline-section">
+        <div class="tl-label">FINESTRA SESSIONE · 5 ORE</div>
+        <div class="tl-bar">
+          <div id="tl-fill" class="tl-fill" style="width:0%;background:var(--green)"></div>
+        </div>
+        <div class="tl-times">
+          <span id="tl-start">—</span>
+          <span id="tl-end">—</span>
+        </div>
+      </div>
+
+      <!-- Sparkline 24h -->
+      <div class="sparkline-section">
+        <div class="sp-label">COSTO ULTIME 24 ORE</div>
+        <canvas id="sparkline" width="320" height="38"></canvas>
+      </div>
     </div>
 
     <!-- Right: weekly + Claude Design -->
@@ -488,6 +535,13 @@ body { background: var(--bg); color: var(--text); }
     <small style="opacity:.6">(circa 30-60 secondi)</small></div>
 </div>
 
+<!-- ── Alert utilizzo basso ───────────────────────────────────────────────── -->
+<div id="alert-overlay" onclick="dismissAlert()">
+  <div class="alert-icon">⚠</div>
+  <div class="alert-title">SESSIONE QUASI ESAURITA</div>
+  <div class="alert-body">Meno del 10% rimasto · Tocca per chiudere</div>
+</div>
+
 <script>
 'use strict';
 
@@ -532,9 +586,13 @@ function clearGauge() {
    STATE
    ════════════════════════════════════════════════════════════════════════ */
 let DATA = {};
-let currentPage  = 'now';
+let currentPage    = 'now';
 let sessionResetTs = null;
 let refreshTimer   = null;
+let hourlyData     = [];
+let alertShownAt   = 0;
+let alertDismissTs = 0;
+const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 
 /* ════════════════════════════════════════════════════════════════════════════
    CLOCK
@@ -548,6 +606,7 @@ let refreshTimer   = null;
     date.textContent = now.toLocaleDateString('it-IT',
       { weekday:'short', day:'numeric', month:'short' });
     renderCountdown(now);
+    renderTimeline();
   }
   tick();
   setInterval(tick, 1000);
@@ -570,20 +629,90 @@ function renderCountdown(now) {
   el.className = 'gauge-countdown' + (secs < 1800 ? ' low' : secs < 7200 ? '' : ' ok');
 }
 
+function renderTimeline() {
+  if (!sessionResetTs) {
+    setStyle('tl-fill', 'width', '0%');
+    setText('tl-start', '—');
+    setText('tl-end',   '—');
+    return;
+  }
+  const SESSION_SECS = 5 * 3600;
+  const nowTs   = Math.floor(Date.now() / 1000);
+  const startTs = sessionResetTs - SESSION_SECS;
+  const elapsed = Math.max(0, nowTs - startTs);
+  const pct     = Math.min(100, Math.round(elapsed / SESSION_SECS * 100));
+  const color   = pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--green)';
+  setStyle('tl-fill', 'width',      pct + '%');
+  setStyle('tl-fill', 'background', color);
+  const fmt = ts => new Date(ts * 1000).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+  setText('tl-start', fmt(startTs));
+  setText('tl-end',   fmt(sessionResetTs) + ' ↺');
+}
+
+function drawSparkline() {
+  const canvas = document.getElementById('sparkline');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!hourlyData.length) return;
+
+  const style   = getComputedStyle(document.documentElement);
+  const cCyan   = style.getPropertyValue('--cyan').trim();
+  const cAmber  = style.getPropertyValue('--amber').trim();
+  const maxCost = Math.max(...hourlyData.map(h => h.cost), 1e-9);
+  const n = hourlyData.length;
+  const barW = W / n;
+
+  hourlyData.forEach((h, i) => {
+    const barH = h.cost > 0 ? Math.max(2, Math.round(h.cost / maxCost * (H - 2))) : 0;
+    if (!barH) return;
+    const x = Math.round(i * barW);
+    const w = Math.max(1, Math.round(barW) - 1);
+    ctx.globalAlpha = i === n - 1 ? 1 : 0.55;
+    ctx.fillStyle   = i === n - 1 ? cAmber : cCyan;
+    ctx.fillRect(x, H - barH, w, barH);
+  });
+  ctx.globalAlpha = 1;
+}
+
+function checkAlert() {
+  const pctUsed = (DATA.account || {}).session_pct_used;
+  if (pctUsed == null) return;
+  const now     = Date.now();
+  const overlay = document.getElementById('alert-overlay');
+  if (pctUsed > 90 && (now - alertShownAt) > ALERT_COOLDOWN_MS && alertDismissTs <= alertShownAt) {
+    alertShownAt = now;
+    overlay.classList.add('show');
+    setTimeout(dismissAlert, 6000);
+  } else if (pctUsed <= 80) {
+    alertShownAt = 0; alertDismissTs = 0;
+    overlay.classList.remove('show');
+  }
+}
+
+function dismissAlert() {
+  alertDismissTs = Date.now();
+  document.getElementById('alert-overlay').classList.remove('show');
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
    DATA LOADING
    ════════════════════════════════════════════════════════════════════════ */
 async function loadData() {
   try {
-    const [account, settings, session] = await Promise.all([
+    const [account, settings, session, hourly] = await Promise.all([
       fetch('/api/account').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/session').then(r => r.json()),
+      fetch('/api/tokens/hourly').then(r => r.json()),
     ]);
     DATA = { account, settings, session };
+    hourlyData     = Array.isArray(hourly) ? hourly : [];
     sessionResetTs = account.session_resets_at_ts || account.reset_at_ts || null;
     applyTheme(settings.theme || 'dark');
     render();
+    drawSparkline();
     scheduleRefresh(settings.poll_interval || 60);
   } catch (e) {
     console.error('loadData:', e);
@@ -705,6 +834,8 @@ function renderNow() {
   setText('last-updated', acc.ts
     ? 'Aggiornato ' + new Date(acc.ts).toLocaleTimeString('it-IT')
     : 'Mai aggiornato');
+
+  checkAlert();
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -848,6 +979,7 @@ async function changeTheme(theme) {
   applyTheme(theme);
   DATA.settings = { ...DATA.settings, theme };
   renderSettings();
+  drawSparkline();
   await fetch('/api/settings', {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ theme }),
