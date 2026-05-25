@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Claude Monitor Kiosk
+Comment=Avvia Chromium in modalità kiosk puntando al Claude Monitor locale
+Exec=/home/pi/claude-monitor/setup/start-kiosk.sh
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true

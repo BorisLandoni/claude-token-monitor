@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=800, height=480, user-scalable=no, initial-scale=1">
+  <title>Claude Monitor</title>
+  <style>
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 800px; height: 480px; overflow: hidden;
+             font-family: system-ui, -apple-system, sans-serif; }
+
+/* ── Themes ──────────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg: #07111C; --surface: #0D1E2E; --surface2: #112233;
+  --border: #1A3050; --border2: #243D58;
+  --text: #E2F0FF; --muted: #5A7FA0; --muted2: #3A5F80;
+  --header-bg: #050D16;
+}
+[data-theme="blue"] {
+  --bg: #030D18; --surface: #0A1828; --surface2: #0D2038;
+  --border: #153045; --border2: #1E4060;
+  --text: #D8EEFF; --muted: #5080A0; --muted2: #305870;
+  --header-bg: #020A12;
+}
+[data-theme="purple"] {
+  --bg: #0C0718; --surface: #18102A; --surface2: #201538;
+  --border: #2C1850; --border2: #3C2268;
+  --text: #EBD8FF; --muted: #8060A8; --muted2: #503878;
+  --header-bg: #080412;
+}
+/* Accent palette — theme-independent */
+:root {
+  --cyan:   #00C8FF; --cyan-glow:   rgba(0,200,255,.25);
+  --green:  #00E87A; --green-glow:  rgba(0,232,122,.25);
+  --amber:  #FFB030; --amber-glow:  rgba(255,176,48,.25);
+  --red:    #FF4455; --red-glow:    rgba(255,68,85,.25);
+  --gold:   #FFD060; --gold-glow:   rgba(255,208,96,.25);
+  --violet: #A060FF;
+}
+
+body { background: var(--bg); color: var(--text); }
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+#header { position:fixed; top:0; left:0; width:800px; height:50px; z-index:200;
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 18px; }
+#main   { position:fixed; top:50px; left:0; width:800px; height:370px; overflow:hidden; }
+#nav    { position:fixed; bottom:0; left:0; width:800px; height:60px; z-index:200;
+  background: var(--header-bg);
+  border-top: 1px solid var(--border);
+  display: flex; }
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.h-left  { display:flex; align-items:center; gap:10px; }
+.h-right { display:flex; align-items:center; gap:18px; }
+.pulse   { width:8px; height:8px; border-radius:50%; background:var(--cyan);
+           box-shadow: 0 0 8px var(--cyan);
+           animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.85)} }
+.app-title { font-size:14px; font-weight:700; letter-spacing:2.5px; color:var(--cyan); }
+#date { font-size:13px; color:var(--muted); }
+#clock { font-size:19px; font-weight:700; font-variant-numeric:tabular-nums;
+         color:var(--text); letter-spacing:1px; }
+
+/* ── Pages ───────────────────────────────────────────────────────────────── */
+.page { position:absolute; inset:0; display:none; }
+.page.active { display:flex; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   NOW PAGE
+   ═════════════════════════════════════════════════════════════════════════ */
+#page-now { flex-direction:row; }
+
+/* Left: arc gauge */
+.now-gauge-col {
+  width:360px; min-width:360px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding: 10px 16px;
+  border-right: 1px solid var(--border);
+}
+.gauge-section-label {
+  font-size:10px; font-weight:700; letter-spacing:2.5px; color:var(--muted);
+  margin-bottom:6px; align-self:flex-start;
+}
+.gauge-wrap { width:220px; height:180px; position:relative; flex-shrink:0; }
+.gauge-wrap svg { width:100%; height:100%; overflow:visible; }
+
+/* SVG gauge text */
+.g-num   { font-size:42px; font-weight:800; font-variant-numeric:tabular-nums; }
+.g-label { font-size:12px; font-weight:500; fill:var(--muted); }
+.g-used  { font-size:11px; fill:var(--muted); }
+
+.gauge-countdown {
+  margin-top:8px; font-size:15px; font-weight:600;
+  color:var(--amber); letter-spacing:.5px; text-align:center;
+}
+.gauge-countdown.ok  { color:var(--green); }
+.gauge-countdown.low { color:var(--red); }
+
+/* Right: weekly + token stats */
+.now-stats-col {
+  flex:1; display:flex; flex-direction:column;
+  padding:14px 16px;
+}
+
+/* Weekly box */
+.weekly-box {
+  background: var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:12px 14px; margin-bottom:10px;
+}
+.box-title { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:8px; }
+.weekly-pct-row { display:flex; align-items:baseline; gap:6px; margin-bottom:6px; }
+.weekly-big   { font-size:28px; font-weight:800; color:var(--green); font-variant-numeric:tabular-nums; }
+.weekly-unit  { font-size:12px; color:var(--muted); }
+.slim-bar { height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin-bottom:5px; }
+.slim-fill { height:100%; border-radius:3px; transition: width .6s ease, background .4s ease; }
+.weekly-meta { font-size:11px; color:var(--muted); }
+
+/* Token stats grid */
+.stats-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:8px; flex:1;
+}
+.stat-card {
+  background: var(--surface); border:1px solid var(--border);
+  border-radius:10px; padding:10px 12px;
+  display:flex; flex-direction:column; justify-content:space-between;
+  transition: border-color .3s;
+}
+.stat-card:hover { border-color:var(--border2); }
+.stat-card .sc-label { font-size:10px; letter-spacing:1.5px; color:var(--muted); margin-bottom:4px; }
+.stat-card .sc-val   { font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; }
+.stat-card.cyan  .sc-val { color:var(--cyan);  }
+.stat-card.green .sc-val { color:var(--green); }
+.stat-card.gold  .sc-val { color:var(--gold);  }
+.stat-card.muted .sc-val { color:var(--muted); }
+
+.now-footer {
+  display:flex; justify-content:space-between; align-items:center;
+  margin-top:8px; padding-top:8px; border-top:1px solid var(--border);
+  font-size:11px; color:var(--muted);
+}
+#session-status { font-weight:700; font-size:12px; }
+.reset-mini-btn {
+  background:none; border:1px solid var(--border); border-radius:5px;
+  color:var(--muted); font-size:10px; padding:3px 8px; cursor:pointer;
+}
+.reset-mini-btn:hover { border-color:var(--red); color:var(--red); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CHART PAGES
+   ═════════════════════════════════════════════════════════════════════════ */
+.chart-page { flex-direction:column; padding:12px 18px; gap:0; }
+
+.chart-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.chart-title  { font-size:11px; font-weight:700; letter-spacing:2.5px; color:var(--muted); }
+.chart-badge  {
+  background: var(--surface); border:1px solid var(--border);
+  border-radius:6px; padding:3px 10px; font-size:11px; color:var(--muted);
+}
+
+.chart-wrap { flex:1; position:relative; min-height:0; }
+
+.chart-summary {
+  display:flex; gap:20px; margin-top:10px; padding-top:10px;
+  border-top:1px solid var(--border);
+}
+.cs-item { display:flex; flex-direction:column; }
+.cs-label { font-size:10px; letter-spacing:1.5px; color:var(--muted); margin-bottom:3px; }
+.cs-val   { font-size:15px; font-weight:700; }
+.cs-val.cyan  { color:var(--cyan);  }
+.cs-val.green { color:var(--green); }
+.cs-val.gold  { color:var(--gold);  }
+.cs-val.muted { color:var(--muted); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SETTINGS PAGE
+   ═════════════════════════════════════════════════════════════════════════ */
+#page-settings { flex-direction:row; gap:0; padding:0; }
+
+.settings-col {
+  flex:1; padding:16px; display:flex; flex-direction:column; gap:10px;
+  overflow-y:auto;
+}
+.settings-col + .settings-col { border-left:1px solid var(--border); }
+
+.settings-title { font-size:10px; font-weight:700; letter-spacing:2.5px; color:var(--muted); }
+
+#login-status {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:9px 12px; font-size:12px; line-height:1.5;
+}
+.s-ok  { color:var(--green);  }
+.s-err { color:var(--red);    }
+.s-inf { color:var(--amber);  }
+
+.field { display:flex; flex-direction:column; gap:4px; }
+.field label { font-size:11px; color:var(--muted); }
+.field input, .field select {
+  background:var(--surface); border:1px solid var(--border);
+  color:var(--text); border-radius:8px; padding:10px 12px;
+  font-size:14px; outline:none; width:100%;
+  transition:border-color .2s;
+}
+.field input:focus, .field select:focus { border-color:var(--cyan); }
+.field select option { background:var(--surface); }
+
+.btn-primary {
+  background:var(--cyan); color:#000; font-weight:700; border:none;
+  border-radius:8px; padding:12px; font-size:14px; cursor:pointer; width:100%;
+  transition:filter .2s;
+}
+.btn-primary:disabled { opacity:.45; cursor:not-allowed; }
+.btn-primary:not(:disabled):hover { filter:brightness(1.12); }
+.btn-primary:not(:disabled):active { filter:brightness(.92); }
+
+.btn-secondary {
+  background:var(--surface); border:1px solid var(--border);
+  color:var(--text); border-radius:8px; padding:10px; font-size:13px;
+  cursor:pointer; width:100%; transition:border-color .2s, color .2s;
+}
+.btn-secondary:hover { border-color:var(--cyan); color:var(--cyan); }
+
+.btn-danger {
+  background:none; border:1px solid var(--border);
+  color:var(--muted); border-radius:8px; padding:9px; font-size:13px;
+  cursor:pointer; width:100%; transition:all .2s;
+}
+.btn-danger:hover { border-color:var(--red); color:var(--red); }
+
+.theme-row { display:flex; gap:8px; }
+.theme-btn {
+  flex:1; padding:9px 4px; font-size:12px; border-radius:7px;
+  background:var(--surface); border:1px solid var(--border);
+  color:var(--text); cursor:pointer; transition:all .2s;
+}
+.theme-btn.active { border-color:var(--cyan); color:var(--cyan); font-weight:700;
+                    box-shadow:0 0 10px var(--cyan-glow); }
+
+.info-card {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; padding:10px 12px; font-size:11px;
+  color:var(--muted); line-height:1.7;
+}
+.info-card strong { color:var(--cyan); }
+
+/* ── Bottom nav ──────────────────────────────────────────────────────────── */
+.nav-tab {
+  flex:1; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:3px; background:none; border:none;
+  color:var(--muted); cursor:pointer;
+  border-top:2px solid transparent;
+  transition:color .2s, border-color .2s;
+}
+.nav-tab.active { color:var(--cyan); border-top-color:var(--cyan); }
+.nav-tab:hover:not(.active) { color:var(--text); }
+.nav-icon  { font-size:16px; line-height:1; }
+.nav-label { font-size:10px; font-weight:600; letter-spacing:.8px; }
+
+/* ── Loading overlay ─────────────────────────────────────────────────────── */
+#overlay {
+  position:fixed; inset:0; background:rgba(7,17,28,.88);
+  display:none; z-index:999; align-items:center; justify-content:center;
+  flex-direction:column; gap:18px; backdrop-filter:blur(4px);
+}
+#overlay.show { display:flex; }
+.spinner {
+  width:44px; height:44px; border:4px solid var(--border);
+  border-top-color:var(--cyan); border-radius:50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to{transform:rotate(360deg)} }
+.overlay-msg { font-size:14px; color:var(--muted); text-align:center; max-width:300px; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header id="header">
+  <div class="h-left">
+    <div class="pulse"></div>
+    <span class="app-title">CLAUDE&nbsp;MONITOR</span>
+  </div>
+  <div class="h-right">
+    <span id="date"></span>
+    <span id="clock"></span>
+  </div>
+</header>
+
+<!-- ── Main ───────────────────────────────────────────────────────────────── -->
+<main id="main">
+
+  <!-- ─── NOW ─────────────────────────────────────────────────────────────── -->
+  <div id="page-now" class="page">
+
+    <!-- Left: arc gauge -->
+    <div class="now-gauge-col">
+      <div class="gauge-section-label">SESSIONE CORRENTE</div>
+
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 220 185" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow-filter" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="4" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Background track -->
+          <circle id="gauge-bg-track"
+            cx="110" cy="105" r="80"
+            fill="none" stroke="var(--surface2)" stroke-width="16"
+            stroke-linecap="round"
+            stroke-dasharray="376.99 125.66"
+            transform="rotate(135, 110, 105)"/>
+
+          <!-- Glow halo (behind progress) -->
+          <circle id="gauge-glow"
+            cx="110" cy="105" r="80"
+            fill="none" stroke="#00E87A" stroke-width="26" opacity=".18"
+            stroke-linecap="round"
+            stroke-dasharray="0 502.65"
+            style="transition: stroke-dasharray .8s ease-out, stroke .4s ease"
+            transform="rotate(135, 110, 105)"/>
+
+          <!-- Progress arc -->
+          <circle id="gauge-arc"
+            cx="110" cy="105" r="80"
+            fill="none" stroke="#00E87A" stroke-width="16"
+            stroke-linecap="round"
+            stroke-dasharray="0 502.65"
+            style="transition: stroke-dasharray .8s ease-out, stroke .4s ease;
+                   filter:url(#glow-filter)"
+            transform="rotate(135, 110, 105)"/>
+
+          <!-- Center: big % number -->
+          <text id="g-pct" x="110" y="96"
+            class="g-num" text-anchor="middle" dominant-baseline="auto"
+            fill="#E2F0FF">—</text>
+
+          <!-- Center: "rimasto" or "usato" label -->
+          <text id="g-sublabel" x="110" y="122"
+            class="g-label" text-anchor="middle">rimasto</text>
+
+          <!-- Bottom: "XX% utilizzato" -->
+          <text id="g-used" x="110" y="162"
+            class="g-used" text-anchor="middle">—</text>
+        </svg>
+      </div>
+
+      <div id="countdown" class="gauge-countdown">—</div>
+    </div>
+
+    <!-- Right: weekly + token stats -->
+    <div class="now-stats-col">
+
+      <!-- Weekly limits box -->
+      <div class="weekly-box">
+        <div class="box-title">SETTIMANALE · TUTTI I MODELLI</div>
+        <div class="weekly-pct-row">
+          <span id="weekly-big" class="weekly-big">—</span>
+          <span class="weekly-unit" id="weekly-unit">rimasto</span>
+        </div>
+        <div class="slim-bar">
+          <div id="weekly-fill" class="slim-fill" style="width:0%;background:var(--green)"></div>
+        </div>
+        <div id="weekly-meta" class="weekly-meta">—</div>
+      </div>
+
+      <!-- Token stats -->
+      <div class="box-title" style="margin-bottom:6px">TOKEN SESSIONE</div>
+      <div class="stats-grid">
+        <div class="stat-card cyan">
+          <div class="sc-label">INPUT</div>
+          <div id="tok-input" class="sc-val">—</div>
+        </div>
+        <div class="stat-card green">
+          <div class="sc-label">OUTPUT</div>
+          <div id="tok-output" class="sc-val">—</div>
+        </div>
+        <div class="stat-card gold">
+          <div class="sc-label">COSTO</div>
+          <div id="tok-cost" class="sc-val">$—</div>
+        </div>
+        <div class="stat-card muted">
+          <div class="sc-label">RICHIESTE</div>
+          <div id="tok-count" class="sc-val">—</div>
+        </div>
+      </div>
+
+      <div class="now-footer">
+        <span id="session-status">—</span>
+        <span id="last-updated">—</span>
+        <button class="reset-mini-btn" onclick="resetSession()">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── HOURLY ───────────────────────────────────────────────────────────── -->
+  <div id="page-hourly" class="page chart-page">
+    <div class="chart-header">
+      <span class="chart-title">UTILIZZO ULTIME 24 ORE</span>
+      <span id="badge-hourly" class="chart-badge">—</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-hourly"></canvas></div>
+    <div class="chart-summary">
+      <div class="cs-item"><span class="cs-label">INPUT</span><span id="sh-in" class="cs-val cyan">—</span></div>
+      <div class="cs-item"><span class="cs-label">OUTPUT</span><span id="sh-out" class="cs-val green">—</span></div>
+      <div class="cs-item"><span class="cs-label">CACHE</span><span id="sh-cache" class="cs-val muted">—</span></div>
+      <div class="cs-item"><span class="cs-label">COSTO</span><span id="sh-cost" class="cs-val gold">—</span></div>
+      <div class="cs-item"><span class="cs-label">ORE ATTIVE</span><span id="sh-active" class="cs-val muted">—</span></div>
+    </div>
+  </div>
+
+  <!-- ─── DAILY ────────────────────────────────────────────────────────────── -->
+  <div id="page-daily" class="page chart-page">
+    <div class="chart-header">
+      <span class="chart-title">UTILIZZO ULTIMI 7 GIORNI</span>
+      <span id="badge-daily" class="chart-badge">—</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-daily"></canvas></div>
+    <div class="chart-summary">
+      <div class="cs-item"><span class="cs-label">INPUT</span><span id="sd-in" class="cs-val cyan">—</span></div>
+      <div class="cs-item"><span class="cs-label">OUTPUT</span><span id="sd-out" class="cs-val green">—</span></div>
+      <div class="cs-item"><span class="cs-label">COSTO</span><span id="sd-cost" class="cs-val gold">—</span></div>
+      <div class="cs-item"><span class="cs-label">MEDIA/GIORNO</span><span id="sd-avg" class="cs-val muted">—</span></div>
+      <div class="cs-item"><span class="cs-label">GIORNI ATTIVI</span><span id="sd-days" class="cs-val muted">—</span></div>
+    </div>
+  </div>
+
+  <!-- ─── WEEKLY ───────────────────────────────────────────────────────────── -->
+  <div id="page-weekly" class="page chart-page">
+    <div class="chart-header">
+      <span class="chart-title">UTILIZZO ULTIME 4 SETTIMANE</span>
+      <span id="badge-weekly" class="chart-badge">—</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chart-weekly"></canvas></div>
+    <div class="chart-summary">
+      <div class="cs-item"><span class="cs-label">INPUT</span><span id="sw-in" class="cs-val cyan">—</span></div>
+      <div class="cs-item"><span class="cs-label">OUTPUT</span><span id="sw-out" class="cs-val green">—</span></div>
+      <div class="cs-item"><span class="cs-label">COSTO</span><span id="sw-cost" class="cs-val gold">—</span></div>
+      <div class="cs-item"><span class="cs-label">MEDIA/SETTIMANA</span><span id="sw-avg" class="cs-val muted">—</span></div>
+      <div class="cs-item"><span class="cs-label">SETT. ATTIVE</span><span id="sw-active" class="cs-val muted">—</span></div>
+    </div>
+  </div>
+
+  <!-- ─── SETTINGS ─────────────────────────────────────────────────────────── -->
+  <div id="page-settings" class="page">
+
+    <div class="settings-col">
+      <div class="settings-title">ACCESSO CLAUDE.AI</div>
+      <div id="login-status" class="info-card"><span class="s-inf">○ Non connesso</span></div>
+
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="s-email" placeholder="tua@email.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="s-pwd" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button id="login-btn" class="btn-primary" onclick="doLogin()">
+        Accedi a Claude.ai
+      </button>
+      <button id="poll-btn" class="btn-secondary" onclick="forcePoll()">
+        ⟳ &nbsp;Aggiorna Adesso
+      </button>
+      <button class="btn-danger" onclick="doLogout()">
+        Disconnetti
+      </button>
+    </div>
+
+    <div class="settings-col">
+      <div class="settings-title">PREFERENZE</div>
+
+      <div class="field">
+        <label>Aggiornamento automatico</label>
+        <select id="poll-interval" onchange="savePollInterval()">
+          <option value="30">30 secondi</option>
+          <option value="60" selected>1 minuto</option>
+          <option value="120">2 minuti</option>
+          <option value="300">5 minuti</option>
+          <option value="600">10 minuti</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Tema colore</label>
+        <div class="theme-row">
+          <button class="theme-btn active" data-theme="dark"
+                  onclick="changeTheme('dark')">Scuro</button>
+          <button class="theme-btn" data-theme="blue"
+                  onclick="changeTheme('blue')">Blu</button>
+          <button class="theme-btn" data-theme="purple"
+                  onclick="changeTheme('purple')">Viola</button>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <strong>Accedi da PC o telefono:</strong><br>
+        <strong id="server-url">http://raspberrypi.local:8080</strong><br><br>
+        <strong>Tampermonkey endpoint:</strong><br>
+        <strong id="api-url">http://raspberrypi.local:8080</strong>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Bottom nav ─────────────────────────────────────────────────────────── -->
+<nav id="nav">
+  <button class="nav-tab active" data-page="now" onclick="go('now')">
+    <span class="nav-icon">◉</span>
+    <span class="nav-label">ADESSO</span>
+  </button>
+  <button class="nav-tab" data-page="hourly" onclick="go('hourly')">
+    <span class="nav-icon">⧖</span>
+    <span class="nav-label">ORA</span>
+  </button>
+  <button class="nav-tab" data-page="daily" onclick="go('daily')">
+    <span class="nav-icon">▦</span>
+    <span class="nav-label">GIORNO</span>
+  </button>
+  <button class="nav-tab" data-page="weekly" onclick="go('weekly')">
+    <span class="nav-icon">▤</span>
+    <span class="nav-label">SETTIMANA</span>
+  </button>
+  <button class="nav-tab" data-page="settings" onclick="go('settings')">
+    <span class="nav-icon">⚙</span>
+    <span class="nav-label">IMPOST.</span>
+  </button>
+</nav>
+
+<!-- ── Loading overlay ────────────────────────────────────────────────────── -->
+<div id="overlay">
+  <div class="spinner"></div>
+  <div id="overlay-msg" class="overlay-msg">Accesso in corso…<br>
+    <small style="opacity:.6">(circa 30-60 secondi)</small></div>
+</div>
+
+<!-- Chart.js ──────────────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ARC GAUGE — SVG constants
+   ════════════════════════════════════════════════════════════════════════ */
+const G_R     = 80;                              // gauge radius
+const G_CIRC  = 2 * Math.PI * G_R;              // full circle ≈ 502.65
+const G_ARC   = G_CIRC * (270 / 360);           // 270° arc ≈ 376.99
+const G_GAP   = G_CIRC - G_ARC;                 // remaining 90° ≈ 125.66
+
+function setGauge(pctUsed, colorVar) {
+  const color   = getComputedStyle(document.documentElement).getPropertyValue(colorVar).trim();
+  const visible = G_ARC * (pctUsed / 100);
+  const dash    = `${visible.toFixed(2)} ${(G_CIRC - visible).toFixed(2)}`;
+
+  const arc  = document.getElementById('gauge-arc');
+  const glow = document.getElementById('gauge-glow');
+  if (!arc) return;
+
+  arc.style.strokeDasharray  = dash;
+  arc.setAttribute('stroke', color);
+  glow.style.strokeDasharray = dash;
+  glow.setAttribute('stroke', color);
+
+  const pctRemain = 100 - pctUsed;
+  const gt = document.getElementById('g-pct');
+  if (gt) { gt.textContent = pctRemain + '%'; gt.setAttribute('fill', color); }
+
+  const gu = document.getElementById('g-used');
+  if (gu) gu.textContent = `${pctUsed}% utilizzato`;
+}
+
+function clearGauge() {
+  ['gauge-arc','gauge-glow'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.strokeDasharray = `0 ${G_CIRC}`; }
+  });
+  const gt = document.getElementById('g-pct');
+  if (gt) { gt.textContent = '—'; gt.setAttribute('fill', 'var(--muted)'); }
+  const gu = document.getElementById('g-used');
+  if (gu) gu.textContent = '—';
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════════════════ */
+let DATA = {};
+let currentPage = 'now';
+let charts = {};
+let sessionResetTs = null;   // Unix seconds
+let refreshTimer   = null;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CLOCK (updates every second)
+   ════════════════════════════════════════════════════════════════════════ */
+(function startClock() {
+  const clk  = document.getElementById('clock');
+  const date = document.getElementById('date');
+  function tick() {
+    const now = new Date();
+    clk.textContent  = now.toLocaleTimeString('it-IT');
+    date.textContent = now.toLocaleDateString('it-IT',
+      { weekday:'short', day:'numeric', month:'short' });
+    renderCountdown(now);
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+
+function renderCountdown(now) {
+  const el = document.getElementById('countdown');
+  if (!el) return;
+  if (!sessionResetTs) { el.textContent = '—'; el.className = 'gauge-countdown'; return; }
+
+  const secs = sessionResetTs - Math.floor(now.getTime() / 1000);
+  if (secs <= 0) { el.textContent = 'Reset imminente'; el.className = 'gauge-countdown'; return; }
+
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  el.textContent = h > 0
+    ? `Si ripristina tra ${h}h ${String(m).padStart(2,'0')}m`
+    : m > 0
+    ? `Si ripristina tra ${m}m ${String(s).padStart(2,'0')}s`
+    : `Si ripristina tra ${s}s`;
+
+  el.className = 'gauge-countdown' + (secs < 1800 ? ' low' : secs < 7200 ? '' : ' ok');
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   DATA LOADING
+   ════════════════════════════════════════════════════════════════════════ */
+async function loadData() {
+  try {
+    const [account, tokens, hourly, daily, weekly, settings, session] = await Promise.all([
+      fetch('/api/account').then(r => r.json()),
+      fetch('/api/tokens').then(r => r.json()),
+      fetch('/api/tokens/hourly').then(r => r.json()),
+      fetch('/api/tokens/daily').then(r => r.json()),
+      fetch('/api/tokens/weekly').then(r => r.json()),
+      fetch('/api/settings').then(r => r.json()),
+      fetch('/api/session').then(r => r.json()),
+    ]);
+    DATA = { account, tokens, hourly, daily, weekly, settings, session };
+    sessionResetTs = account.session_resets_at_ts || account.reset_at_ts || null;
+    applyTheme(settings.theme || 'dark');
+    render();
+    scheduleRefresh(settings.poll_interval || 60);
+  } catch (e) {
+    console.error('loadData:', e);
+  }
+}
+
+function scheduleRefresh(secs) {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(loadData, Math.max(30, secs) * 1000);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   NAVIGATION
+   ════════════════════════════════════════════════════════════════════════ */
+function go(page) {
+  currentPage = page;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`page-${page}`).classList.add('active');
+  document.querySelector(`.nav-tab[data-page="${page}"]`).classList.add('active');
+  render();
+}
+
+function render() {
+  switch (currentPage) {
+    case 'now':     renderNow();          break;
+    case 'hourly':  renderChart('hourly'); break;
+    case 'daily':   renderChart('daily');  break;
+    case 'weekly':  renderChart('weekly'); break;
+    case 'settings':renderSettings();     break;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   RENDER — NOW
+   ════════════════════════════════════════════════════════════════════════ */
+function renderNow() {
+  const acc = DATA.account || {};
+  const tok = DATA.tokens  || {};
+
+  /* ── Session gauge ──────────────────────────────────────────────────── */
+  let pctUsed = null;
+
+  if (acc.session_pct_used != null) {
+    // Pro account: percentage from settings/utilizzo page
+    pctUsed = acc.session_pct_used;
+  } else if (acc.messages_remaining != null && acc.messages_limit) {
+    // Count-based fallback
+    pctUsed = Math.round((acc.messages_limit - acc.messages_remaining) / acc.messages_limit * 100);
+  }
+
+  if (pctUsed != null) {
+    const colorVar = pctUsed < 50 ? '--green' : pctUsed < 75 ? '--amber' : '--red';
+    setGauge(pctUsed, colorVar);
+
+    // Also show count if available
+    if (acc.messages_remaining != null) {
+      document.getElementById('g-sublabel').textContent =
+        `${acc.messages_remaining} / ${acc.messages_limit}`;
+    } else {
+      document.getElementById('g-sublabel').textContent = 'rimasto';
+    }
+  } else {
+    clearGauge();
+    document.getElementById('g-sublabel').textContent = 'nessun dato';
+  }
+
+  /* ── Weekly ─────────────────────────────────────────────────────────── */
+  const wPct = acc.weekly_pct_used;
+  if (wPct != null) {
+    const wRemain = acc.weekly_pct_remaining ?? (100 - wPct);
+    const wColor  = wPct < 50 ? 'var(--green)' : wPct < 75 ? 'var(--amber)' : 'var(--red)';
+    setText('weekly-big', wRemain + '%');
+    setStyle('weekly-big', 'color', wPct < 50 ? 'var(--green)' : wPct < 75 ? 'var(--amber)' : 'var(--red)');
+    setStyle('weekly-fill', 'width', wPct + '%');
+    setStyle('weekly-fill', 'background', wColor);
+    const label = acc.weekly_resets_label
+      ? `Reset: ${acc.weekly_resets_label} · ${wPct}% utilizzato`
+      : `${wPct}% utilizzato`;
+    setText('weekly-meta', label);
+  } else {
+    setText('weekly-big', '—');
+    setText('weekly-meta', 'Accedi per vedere i limiti settimanali');
+  }
+
+  /* ── Token stats ─────────────────────────────────────────────────────── */
+  setText('tok-input',  fmt(tok.total_input));
+  setText('tok-output', fmt(tok.total_output));
+  setText('tok-cost',   '$' + (tok.cost_usd || 0).toFixed(2));
+  setText('tok-count',  tok.requests_count || 0);
+
+  /* ── Footer ──────────────────────────────────────────────────────────── */
+  const s = DATA.session || {};
+  const st = document.getElementById('session-status');
+  if (s.logged_in && (acc.session_status || 'ok') === 'ok') {
+    st.textContent = '● Connesso';
+    st.style.color = 'var(--green)';
+  } else if ((acc.session_status) === 'expired') {
+    st.textContent = '⚠ Sessione scaduta';
+    st.style.color = 'var(--red)';
+  } else {
+    st.textContent = '○ Non connesso';
+    st.style.color = 'var(--red)';
+  }
+  setText('last-updated', acc.ts
+    ? 'Aggiornato ' + new Date(acc.ts).toLocaleTimeString('it-IT') : 'Mai aggiornato');
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   RENDER — CHARTS
+   ════════════════════════════════════════════════════════════════════════ */
+function renderChart(type) {
+  const data    = DATA[type] || [];
+  const labels  = data.map(d => d.label);
+  const inputs  = data.map(d => d.input);
+  const outputs = data.map(d => d.output);
+
+  const id = `chart-${type}`;
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  // Gradient fill for bars
+  const mkGrad = (top, bottom) => {
+    const h = canvas.offsetHeight || 260;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, top);
+    g.addColorStop(1, bottom);
+    return g;
+  };
+
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Output',
+          data: outputs,
+          backgroundColor: mkGrad('rgba(0,232,122,.80)', 'rgba(0,232,122,.30)'),
+          borderColor:     'rgba(0,232,122,.90)',
+          borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false,
+          stack: 'stack',
+        },
+        {
+          label: 'Input',
+          data: inputs,
+          backgroundColor: mkGrad('rgba(0,200,255,.70)', 'rgba(0,200,255,.20)'),
+          borderColor:     'rgba(0,200,255,.85)',
+          borderWidth: 1,
+          borderRadius: 4,
+          borderSkipped: false,
+          stack: 'stack',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 350, easing: 'easeOutQuart' },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { color: '#5A7FA0', font: { size: 11 }, boxWidth: 12, padding: 14 },
+        },
+        tooltip: {
+          backgroundColor: 'rgba(13,30,46,.96)',
+          borderColor: 'rgba(26,48,80,.8)',
+          borderWidth: 1,
+          titleColor: '#E2F0FF',
+          bodyColor:  '#5A7FA0',
+          callbacks: {
+            label: c => `  ${c.dataset.label}: ${fmt(c.raw)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { color: '#3A5F80', font: { size: 11 }, maxRotation: 0 },
+          grid:  { color: 'rgba(26,48,80,.4)', drawBorder: false },
+        },
+        y: {
+          stacked: true,
+          ticks: {
+            color: '#3A5F80', font: { size: 11 },
+            callback: v => fmt(v),
+          },
+          grid: { color: 'rgba(26,48,80,.4)', drawBorder: false },
+        },
+      },
+    },
+  });
+
+  // Summary
+  const totIn   = data.reduce((a,d) => a + d.input,  0);
+  const totOut  = data.reduce((a,d) => a + d.output, 0);
+  const totCost = data.reduce((a,d) => a + d.cost,   0);
+  const active  = data.filter(d => d.input + d.output > 0).length;
+  const count   = data.length;
+
+  if (type === 'hourly') {
+    setText('sh-in',     fmt(totIn));
+    setText('sh-out',    fmt(totOut));
+    setText('sh-cache',  '—');
+    setText('sh-cost',   '$' + totCost.toFixed(2));
+    setText('sh-active', active + ' / 24');
+    setText('badge-hourly', new Date().toLocaleDateString('it-IT',{weekday:'short',day:'numeric',month:'short'}));
+  } else if (type === 'daily') {
+    setText('sd-in',   fmt(totIn));
+    setText('sd-out',  fmt(totOut));
+    setText('sd-cost', '$' + totCost.toFixed(2));
+    setText('sd-avg',  fmt(active ? Math.round((totIn + totOut) / active) : 0));
+    setText('sd-days', active + ' / 7');
+    setText('badge-daily', '7 giorni');
+  } else {
+    setText('sw-in',     fmt(totIn));
+    setText('sw-out',    fmt(totOut));
+    setText('sw-cost',   '$' + totCost.toFixed(2));
+    setText('sw-avg',    fmt(active ? Math.round((totIn + totOut) / active) : 0));
+    setText('sw-active', active + ' / 4');
+    setText('badge-weekly', '4 settimane');
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   RENDER — SETTINGS
+   ════════════════════════════════════════════════════════════════════════ */
+function renderSettings() {
+  const s   = DATA.session  || {};
+  const cfg = DATA.settings || {};
+  const acc = DATA.account  || {};
+
+  const el = document.getElementById('login-status');
+  if (s.logged_in && acc.session_status !== 'expired') {
+    el.innerHTML = `<span class="s-ok">● Connesso come ${s.email || 'utente'}</span>`;
+    if (s.cookie_age_hours)
+      el.innerHTML += `<br><small style="opacity:.6">Cookie: ${s.cookie_age_hours}h fa</small>`;
+  } else if (acc.session_status === 'expired') {
+    el.innerHTML = '<span class="s-err">⚠ Sessione scaduta — accedi di nuovo</span>';
+  } else {
+    el.innerHTML = '<span class="s-err">○ Non connesso — inserisci le credenziali</span>';
+  }
+
+  const em = document.getElementById('s-email');
+  if (!em.value) em.value = cfg.email || '';
+
+  const pi = document.getElementById('poll-interval');
+  pi.value = String(cfg.poll_interval || 60);
+
+  document.querySelectorAll('.theme-btn').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'dark')));
+
+  const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
+  setText('server-url', base);
+  setText('api-url', base);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ACTIONS
+   ════════════════════════════════════════════════════════════════════════ */
+async function doLogin() {
+  const email = document.getElementById('s-email').value.trim();
+  const pwd   = document.getElementById('s-pwd').value;
+  if (!email || !pwd) { alert('Inserisci email e password'); return; }
+
+  showOverlay('Accesso a Claude.ai in corso…\n(circa 30–60 secondi)');
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  try {
+    const res  = await fetch('/api/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password: pwd }),
+    });
+    const data = await res.json();
+    document.getElementById('s-pwd').value = '';
+    document.getElementById('login-status').innerHTML = data.ok
+      ? `<span class="s-ok">● Accesso riuscito! Carico dati…</span>`
+      : `<span class="s-err">● Fallito: ${data.message}</span>`;
+    if (data.ok) await loadData();
+  } catch (e) {
+    document.getElementById('login-status').innerHTML =
+      `<span class="s-err">● Errore: ${e.message}</span>`;
+  } finally {
+    hideOverlay();
+    btn.disabled = false;
+  }
+}
+
+async function doLogout() {
+  await fetch('/api/logout', { method:'POST' });
+  await loadData();
+}
+
+async function forcePoll() {
+  const btn = document.getElementById('poll-btn');
+  btn.textContent = '⟳  Aggiornamento…'; btn.disabled = true;
+  try {
+    await fetch('/api/poll', { method:'POST' });
+    await loadData();
+  } finally {
+    btn.textContent = '⟳  Aggiorna Adesso'; btn.disabled = false;
+  }
+}
+
+async function resetSession() {
+  if (!confirm('Cancellare i dati della sessione token corrente?')) return;
+  await fetch('/api/tokens', { method:'DELETE' });
+  await loadData();
+}
+
+async function savePollInterval() {
+  const v = parseInt(document.getElementById('poll-interval').value);
+  await fetch('/api/settings', {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ poll_interval: v }),
+  });
+  scheduleRefresh(v);
+}
+
+async function changeTheme(theme) {
+  applyTheme(theme);
+  DATA.settings = { ...DATA.settings, theme };
+  renderSettings();
+  await fetch('/api/settings', {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ theme }),
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   THEME / OVERLAY / UTILS
+   ════════════════════════════════════════════════════════════════════════ */
+function applyTheme(t) { document.documentElement.dataset.theme = t; }
+
+function showOverlay(msg) {
+  document.getElementById('overlay-msg').innerHTML =
+    (msg || 'Caricamento…').replace('\n','<br>');
+  document.getElementById('overlay').classList.add('show');
+}
+function hideOverlay() { document.getElementById('overlay').classList.remove('show'); }
+
+function fmt(n) {
+  if (!n || isNaN(n)) return '0';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return Math.round(n/1e3) + 'K';
+  return String(n);
+}
+function setText(id, v)      { const e=document.getElementById(id); if(e) e.textContent=String(v); }
+function setStyle(id, p, v)  { const e=document.getElementById(id); if(e) e.style[p]=v; }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   BOOT
+   ════════════════════════════════════════════════════════════════════════ */
+loadData();
+</script>
+</body>
+</html>

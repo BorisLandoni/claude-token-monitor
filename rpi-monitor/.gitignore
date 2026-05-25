@@ -1,0 +1,27 @@
+# Runtime data (never commit credentials or session cookies)
+rpi-monitor/backend/cookies.json
+rpi-monitor/backend/endpoints.json
+rpi-monitor/backend/data.json
+rpi-monitor/backend/.venv/
+rpi-monitor/backend/__pycache__/
+rpi-monitor/setup/start-kiosk.sh
+
+# Node
+esp32-token-monitor/server/node_modules/
+esp32-token-monitor/server/data.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
