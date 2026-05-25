@@ -349,6 +349,19 @@ body { background: var(--bg); color: var(--text); }
         <div id="design-meta" class="weekly-meta">—</div>
       </div>
 
+      <!-- Routine giornaliere (hidden until data arrives) -->
+      <div class="weekly-box" id="routine-box" style="display:none">
+        <div class="box-title">ROUTINE GIORNALIERE</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
+          <span id="routine-used" style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--cyan)">—</span>
+          <span id="routine-limit" style="font-size:13px;color:var(--muted)">/ —</span>
+          <span style="font-size:11px;color:var(--muted);margin-left:auto" id="routine-meta">—</span>
+        </div>
+        <div class="slim-bar">
+          <div id="routine-fill" class="slim-fill" style="width:0%;background:var(--cyan)"></div>
+        </div>
+      </div>
+
       <!-- Footer -->
       <div class="now-footer">
         <span id="session-status">—</span>
@@ -659,6 +672,24 @@ function renderNow() {
     setText('design-meta', `${dPct}% utilizzato`);
   } else {
     designBox.style.display = 'none';
+  }
+
+  /* ── Routine giornaliere ──────────────────────────────────────────────── */
+  const routineBox = document.getElementById('routine-box');
+  if (acc.routines_limit != null) {
+    routineBox.style.display = '';
+    const rUsed  = acc.routines_used ?? 0;
+    const rLimit = acc.routines_limit;
+    const rPct   = Math.min(100, Math.round(rUsed / rLimit * 100));
+    const rColor = rPct > 75 ? 'var(--red)' : rPct > 50 ? 'var(--amber)' : 'var(--cyan)';
+    setText('routine-used',  rUsed);
+    setText('routine-limit', '/ ' + rLimit);
+    setText('routine-meta',  rUsed === 0 ? 'Nessuna usata oggi' : `${rPct}% utilizzato`);
+    setStyle('routine-fill', 'width',      rPct + '%');
+    setStyle('routine-fill', 'background', rColor);
+    setStyle('routine-used', 'color',      rColor);
+  } else {
+    routineBox.style.display = 'none';
   }
 
   /* ── Footer ───────────────────────────────────────────────────────────── */
