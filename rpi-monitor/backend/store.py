@@ -1,4 +1,4 @@
-"""In-memory data store with JSON persistence. Same data model as server.js."""
+"""In-memory data store with JSON persistence."""
 
 import json
 import time
