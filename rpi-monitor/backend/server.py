@@ -88,17 +88,20 @@ async def poll_loop():
         if not client.has_auth():
             continue
         try:
-            await do_poll()
+            result = await do_poll()
+            if result.get('refreshed'):
+                print(f'[poll] auto-poll completato')
         except Exception as e:
             print(f'[poll] errore: {e}')
 
 
-async def do_poll():
+async def do_poll() -> dict:
     """
     Strategia poll:
     1. OAuth (Claude Code) → sessione, weekly, crediti (primario, ~1s).
     2. Se cookie disponibili → DOM scrape Playwright per Claude Design + routine.
     3. Merge: i dati DOM arricchiscono quelli OAuth.
+    Ritorna {'refreshed': bool, 'next_poll_in': int}
     """
     merged: dict = {}
 
@@ -108,7 +111,7 @@ async def do_poll():
         if store.account:
             store.account['session_status'] = 'oauth_expired'
             store.save()
-        return
+        return {'refreshed': False, 'next_poll_in': 0}
     if oauth_data:
         merged.update(oauth_data)
 
@@ -123,6 +126,8 @@ async def do_poll():
 
     if merged:
         process_account_limits(merged)
+        return {'refreshed': True, 'next_poll_in': client.seconds_until_next_poll()}
+    return {'refreshed': False, 'next_poll_in': client.seconds_until_next_poll()}
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -260,8 +265,8 @@ def get_session():
 async def force_poll():
     """Trigger immediato di un poll completo (OAuth + DOM se cookie)."""
     try:
-        await do_poll()
-        return {'ok': True, 'account': store.account}
+        result = await do_poll()
+        return {'ok': True, 'account': store.account, **result}
     except Exception as e:
         return {'ok': False, 'reason': str(e)}
 

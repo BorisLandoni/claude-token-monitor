@@ -866,9 +866,11 @@ function drawSparkline() {
   const canvas = document.getElementById('sparkline');
   if (!canvas) return;
 
-  // Dimensioni: adatta al contenitore
-  const rect = canvas.parentElement.getBoundingClientRect();
-  const W = Math.round(rect.width) || 400;
+  // Dimensioni robuste: prova parent, poi canvas stesso, poi fallback
+  const parent = canvas.parentElement;
+  let W = Math.round(parent.getBoundingClientRect().width);
+  if (!W) W = Math.round(canvas.getBoundingClientRect().width);
+  if (!W) W = 400;
   const H = 140;
   canvas.width  = W;
   canvas.height = H;
@@ -895,27 +897,25 @@ function drawSparkline() {
 
   const pts = sessionHistory.slice(-96);  // max 96 punti (8 ore a 5min)
 
-  if (pts.length < 2) {
+  if (pts.length === 0) {
     ctx.fillStyle    = cMuted;
     ctx.font         = '11px system-ui, sans-serif';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(
-      pts.length === 0
-        ? 'Accumulo dati… (aggiorna tra qualche minuto)'
-        : 'Accumulo dati…',
-      W / 2, H / 2
-    );
+    ctx.fillText('Accumulo dati… (aggiorna tra qualche minuto)', W / 2, H / 2);
     return;
   }
 
+  // Con 1 solo punto: duplicalo per disegnare linea orizzontale piatta
+  const pts2 = pts.length === 1 ? [pts[0], pts[0]] : pts;
+
   // Colore in base al valore corrente
-  const lastPct   = pts[pts.length - 1].pct;
+  const lastPct   = pts2[pts2.length - 1].pct;
   const colorName = lastPct < 50 ? '--cyan' : lastPct < 75 ? '--amber' : '--red';
   const cLine     = style.getPropertyValue(colorName).trim();
 
-  const n   = pts.length;
-  const dx  = W / (n - 1);
+  const n   = pts2.length;
+  const dx  = n > 1 ? W / (n - 1) : W;
   const PAD = 8;
   const yOf = pct => H - PAD - (pct / 100) * (H - PAD * 2);
 
@@ -936,13 +936,12 @@ function drawSparkline() {
 
   // Area riempita con gradiente
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  // Converte hex o rgb in rgba per il gradiente
   grad.addColorStop(0, hexToRgba(cLine, 0.35));
   grad.addColorStop(1, hexToRgba(cLine, 0.03));
 
   ctx.beginPath();
   ctx.moveTo(0, H);
-  pts.forEach((p, i) => ctx.lineTo(i * dx, yOf(p.pct)));
+  pts2.forEach((p, i) => ctx.lineTo(i * dx, yOf(p.pct)));
   ctx.lineTo((n - 1) * dx, H);
   ctx.closePath();
   ctx.fillStyle = grad;
@@ -950,15 +949,15 @@ function drawSparkline() {
 
   // Linea superiore
   ctx.beginPath();
-  pts.forEach((p, i) =>
+  pts2.forEach((p, i) =>
     i === 0 ? ctx.moveTo(0, yOf(p.pct)) : ctx.lineTo(i * dx, yOf(p.pct)));
   ctx.strokeStyle = cLine;
   ctx.lineWidth   = 2;
   ctx.setLineDash([]);
   ctx.stroke();
 
-  // Punto finale
-  const lx = (n - 1) * dx;
+  // Punto finale (al centro se singolo)
+  const lx = pts.length === 1 ? W / 2 : (n - 1) * dx;
   const ly = yOf(lastPct);
   ctx.beginPath();
   ctx.arc(lx, ly, 4, 0, Math.PI * 2);
@@ -970,6 +969,14 @@ function drawSparkline() {
   ctx.textAlign    = lx > W - 40 ? 'right' : 'left';
   ctx.textBaseline = ly < 20 ? 'top' : 'bottom';
   ctx.fillText(lastPct + '%', lx + (lx > W - 40 ? -7 : 7), ly + (ly < 20 ? 4 : -4));
+  // Nota "in accumulo" se 1 solo punto
+  if (pts.length === 1) {
+    ctx.fillStyle    = cMuted;
+    ctx.font         = '9px system-ui';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Accumulo dati — in attesa del 2° punto…', W / 2, H - 2);
+  }
 }
 
 function hexToRgba(color, alpha) {
@@ -1322,12 +1329,28 @@ async function nowRefresh() {
   btn.classList.add('loading');
   btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNAMENTO…';
   try {
-    await fetch('/api/poll', { method:'POST' });
+    const res  = await fetch('/api/poll', { method:'POST' });
+    const data = await res.json().catch(() => ({}));
     await loadData();
-  } catch(e) {} finally {
-    btn.classList.remove('loading');
-    btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
-  }
+    if (data.refreshed === false && data.next_poll_in > 0) {
+      // Rate limited: mostra conto alla rovescia
+      let secs = data.next_poll_in;
+      btn.classList.remove('loading');
+      const tick = () => {
+        if (secs <= 0) {
+          btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
+          return;
+        }
+        btn.innerHTML = `✓ Già aggiornato — prossimo tra ${secs}s`;
+        secs--;
+        setTimeout(tick, 1000);
+      };
+      tick();
+      return;  // evita il finally
+    }
+  } catch(e) {}
+  btn.classList.remove('loading');
+  btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
 }
 
 async function doLogout() {

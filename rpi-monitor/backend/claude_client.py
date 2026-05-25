@@ -443,12 +443,21 @@ class ClaudeClient:
             self._oauth_last_call = time.time()  # aggiorna timestamp solo su successo
 
             data = resp.json()
+            print(f'[oauth] raw response: {json.dumps(data)[:300]}')
             out: dict = {'plan': 'pro'}
+
+            def _to_pct(v) -> int:
+                """Converte utilization API → intero 0-100.
+                L'endpoint Anthropic restituisce frazioni 0-1 (es. 0.62 = 62%)."""
+                f = float(v)
+                if f <= 1.0:          # formato frazione 0-1
+                    f *= 100
+                return min(100, max(0, round(f)))
 
             # Sessione 5h
             fh = data.get('five_hour') or {}
             if fh.get('utilization') is not None:
-                spct = round(float(fh['utilization']))
+                spct = _to_pct(fh['utilization'])
                 out['session_pct_used']      = spct
                 out['session_pct_remaining'] = 100 - spct
             if fh.get('resets_at'):
@@ -459,7 +468,7 @@ class ClaudeClient:
             # Weekly 7d
             sd = data.get('seven_day') or {}
             if sd.get('utilization') is not None:
-                wpct = round(float(sd['utilization']))
+                wpct = _to_pct(sd['utilization'])
                 out['weekly_pct_used']      = wpct
                 out['weekly_pct_remaining'] = 100 - wpct
             if sd.get('resets_at'):
@@ -490,6 +499,14 @@ class ClaudeClient:
         except Exception as e:
             print(f'[oauth] errore: {e}')
             return None
+
+    def seconds_until_next_poll(self) -> int:
+        """Secondi rimanenti prima che sia consentita un'altra chiamata OAuth."""
+        now = time.time()
+        if now < self._oauth_retry_after:
+            return int(self._oauth_retry_after - now)
+        remaining = OAUTH_MIN_INTERVAL - (now - self._oauth_last_call)
+        return max(0, int(remaining))
 
     @staticmethod
     def _iso_to_ts(iso: str) -> Optional[int]:
