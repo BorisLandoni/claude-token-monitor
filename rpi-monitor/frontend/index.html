@@ -463,8 +463,8 @@ body { background: var(--bg); color: var(--text); }
         <input type="email" id="s-email" placeholder="tua@email.com" autocomplete="email">
       </div>
       <div class="field">
-        <label>Password</label>
-        <input type="password" id="s-pwd" placeholder="••••••••" autocomplete="current-password">
+        <label>Password <span style="font-weight:400;color:var(--muted)">(lascia vuoto se usi magic link)</span></label>
+        <input type="password" id="s-pwd" placeholder="vuoto = ti mandiamo un link via email" autocomplete="current-password">
       </div>
       <button id="login-btn" class="btn-primary" onclick="doLogin()">
         Accedi a Claude.ai
@@ -927,7 +927,11 @@ async function doLogin() {
   const email = document.getElementById('s-email').value.trim();
   const pwd   = document.getElementById('s-pwd').value;
   if (!email || !pwd) { alert('Inserisci email e password'); return; }
-  showOverlay('Accesso a Claude.ai in corso…\n(circa 30–60 secondi)');
+  const hasPwd = document.getElementById('s-pwd').value.trim();
+  const overlayMsg = hasPwd
+    ? 'Accesso a Claude.ai in corso…\n(circa 30–60 secondi)'
+    : 'Si apre una finestra Chrome:\ncopia il link dall\'email e aprilo lì.\nAspetta fino a 5 minuti.';
+  showOverlay(overlayMsg);
   const btn = document.getElementById('login-btn');
   btn.disabled = true;
   try {
