@@ -455,32 +455,25 @@ body { background: var(--bg); color: var(--text); }
   <div id="page-settings" class="page">
 
     <div class="settings-col">
-      <div class="settings-title">ACCESSO CLAUDE.AI</div>
-      <div id="login-status" class="info-card"><span class="s-inf">○ Non connesso</span></div>
+      <div class="settings-title">ACCESSO CLAUDE</div>
+      <div id="login-status" class="info-card"><span class="s-inf">○ Verifica in corso…</span></div>
 
-      <div class="field">
-        <label>Email</label>
-        <input type="email" id="s-email" placeholder="tua@email.com" autocomplete="email">
-      </div>
-      <div class="field">
-        <label>Password</label>
-        <input type="password" id="s-pwd" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <button id="login-btn" class="btn-primary" onclick="doLogin()">
-        Accedi a Claude.ai
+      <button id="poll-btn" class="btn-secondary" onclick="forcePoll()">
+        ⟳ &nbsp;Aggiorna Adesso
       </button>
 
       <details style="margin-top:6px">
-        <summary style="cursor:pointer;font-size:12px;color:var(--muted);padding:4px 0">
-          Login non funziona? <span style="color:var(--cyan)">Importa cookie da Chrome →</span>
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted);padding:6px 0">
+          <span style="color:var(--cyan)">+ Importa cookie da Chrome</span>
+          <span style="color:var(--muted2)">&nbsp;(per Claude Design e Routine)</span>
         </summary>
         <div style="margin-top:8px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.5">
-          <b style="color:var(--text)">Per account senza password (magic link):</b><br>
+          <b style="color:var(--text)">L'OAuth fornisce sessione, weekly e crediti.</b><br>
+          Per vedere anche <b>Claude Design %</b> e <b>routine giornaliere</b>:<br>
           1. Apri <b>claude.ai</b> in Chrome (dove sei loggato)<br>
-          2. Premi <b>F12</b> → tab <b>Network</b> → ricarica con <b>F5</b><br>
-          3. Clicca una qualsiasi richiesta a <i>claude.ai</i><br>
-          4. Tasto destro → <b>Copy</b> → <b>Copy as cURL (bash)</b><br>
-          5. Incolla qui sotto e clicca Importa
+          2. Premi <b>F12</b> → tab <b>Network</b> → <b>F5</b><br>
+          3. Clicca una richiesta a <i>claude.ai</i> → tasto destro → <b>Copy as cURL (bash)</b><br>
+          4. Incolla qui sotto e clicca Importa
           <textarea id="cookie-text" rows="3" placeholder="curl 'https://claude.ai/...' -H 'Cookie: sessionKey=...'"
             style="width:100%;margin-top:8px;background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px;font-family:monospace;font-size:10px;resize:vertical"></textarea>
           <button class="btn-secondary" style="margin-top:6px" onclick="importCookies()">
@@ -489,11 +482,8 @@ body { background: var(--bg); color: var(--text); }
         </div>
       </details>
 
-      <button id="poll-btn" class="btn-secondary" onclick="forcePoll()">
-        ⟳ &nbsp;Aggiorna Adesso
-      </button>
       <button class="btn-danger" onclick="doLogout()">
-        Disconnetti
+        Cancella sessione locale
       </button>
     </div>
 
@@ -918,18 +908,29 @@ function renderSettings() {
   const acc = DATA.account  || {};
 
   const el = document.getElementById('login-status');
-  if (s.logged_in && acc.session_status !== 'expired') {
-    el.innerHTML = `<span class="s-ok">● Connesso come ${s.email || 'utente'}</span>`;
-    if (s.cookie_age_hours)
-      el.innerHTML += `<br><small style="opacity:.6">Cookie: ${s.cookie_age_hours}h fa</small>`;
-  } else if (acc.session_status === 'expired') {
-    el.innerHTML = '<span class="s-err">⚠ Sessione scaduta — accedi di nuovo</span>';
+  const lines = [];
+
+  // OAuth status (primario)
+  if (s.oauth_available) {
+    if (acc.session_status === 'oauth_expired') {
+      lines.push('<span class="s-err">⚠ OAuth scaduto — esegui <code>claude /login</code></span>');
+    } else {
+      lines.push('<span class="s-ok">● OAuth Claude Code attivo</span>');
+    }
   } else {
-    el.innerHTML = '<span class="s-err">○ Non connesso — inserisci le credenziali</span>';
+    lines.push('<span class="s-err">✗ OAuth Claude Code non trovato</span>'
+      + '<br><small style="opacity:.7">Installa Claude Code ed esegui <code>claude /login</code></small>');
   }
 
-  const em = document.getElementById('s-email');
-  if (!em.value) em.value = cfg.email || '';
+  // Cookie status (secondario opzionale)
+  if (s.cookies_available) {
+    const age = s.cookie_age_hours ? ` (${s.cookie_age_hours}h fa)` : '';
+    lines.push(`<span class="s-ok">● Cookie sessionKey importati${age}</span>`);
+  } else {
+    lines.push('<span class="s-inf">○ Cookie non importati — opzionale per Design/Routine</span>');
+  }
+
+  el.innerHTML = lines.join('<br>');
 
   document.getElementById('poll-interval').value = String(cfg.poll_interval || 60);
 
@@ -943,33 +944,6 @@ function renderSettings() {
 /* ════════════════════════════════════════════════════════════════════════════
    ACTIONS
    ════════════════════════════════════════════════════════════════════════ */
-async function doLogin() {
-  const email = document.getElementById('s-email').value.trim();
-  const pwd   = document.getElementById('s-pwd').value;
-  if (!email || !pwd) { alert('Inserisci email e password.\n\nSe non hai una password, usa "Importa cookie da Chrome" qui sotto.'); return; }
-  showOverlay('Accesso a Claude.ai in corso…\n(circa 30–60 secondi)');
-  const btn = document.getElementById('login-btn');
-  btn.disabled = true;
-  try {
-    const res  = await fetch('/api/login', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ email, password: pwd }),
-    });
-    const data = await res.json();
-    document.getElementById('s-pwd').value = '';
-    document.getElementById('login-status').innerHTML = data.ok
-      ? `<span class="s-ok">● Accesso riuscito! Carico dati…</span>`
-      : `<span class="s-err">● Fallito: ${data.message}</span>`;
-    if (data.ok) await loadData();
-  } catch (e) {
-    document.getElementById('login-status').innerHTML =
-      `<span class="s-err">● Errore: ${e.message}</span>`;
-  } finally {
-    hideOverlay();
-    btn.disabled = false;
-  }
-}
-
 async function doLogout() {
   await fetch('/api/logout', { method:'POST' });
   await loadData();
