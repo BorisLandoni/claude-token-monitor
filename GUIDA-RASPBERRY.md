@@ -509,7 +509,7 @@ sudo systemctl start claude-monitor
 ### Errore "Accesso fallito" durante il login
 
 1. **Controlla email e password**: prova ad accedere manualmente su claude.ai
-2. **Autenticazione a due fattori**: se hai 2FA attivo su Claude.ai, il login automatico non funziona — devi disabilitarlo temporaneamente o usare Tampermonkey
+2. **Autenticazione a due fattori**: se hai 2FA attivo su Claude.ai, il login automatico non funziona — devi disabilitarlo temporaneamente
 3. **Chromium non trovato**: `which chromium-browser` — deve rispondere con un percorso
 4. **Playwright deps mancanti**: riinstalla le dipendenze
    ```bash
@@ -564,7 +564,7 @@ Claude.ai (web/mobile/VS Code/Desktop)
        │        (Playwright + httpx + cookie di sessione)
        ▼
 ┌─────────────────────────────┐
-│  RPi 4  ·  FastAPI  :8080   │  ← Tampermonkey può inviargli dati (opz.)
+│  RPi 4  ·  FastAPI  :8080   │
 │  rpi-monitor/backend/       │
 └──────────────┬──────────────┘
                │
