@@ -21,7 +21,10 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 PORT = 8080
-FRONTEND_DIR = Path(__file__).parent.parent / 'frontend'
+# In repo: rpi-monitor/backend/ → frontend è ../frontend
+# In tmp/ (sviluppo): index.html è nella stessa cartella
+_repo_frontend = Path(__file__).parent.parent / 'frontend'
+FRONTEND_DIR   = _repo_frontend if _repo_frontend.exists() else Path(__file__).parent
 
 # ── Stato simulazione ─────────────────────────────────────────────────────────
 _rng = random.Random(int(time.time()))
@@ -184,7 +187,7 @@ if __name__ == '__main__':
     print('=' * 52)
     print('   CLAUDE MONITOR  —  Modalita Simulazione')
     print('=' * 52)
-    print(f'   Browser  →  http://localhost:{PORT}')
+    print(f'   Browser  ->  http://localhost:{PORT}')
     print(f'   Sessione :  {pct}% usato  (iniziata {elapsed_h:.1f}h fa)')
     print(f'   Crediti  :  {CREDITS_SPENT:.2f} € / {CREDITS_LIMIT:.0f} €')
     print(f'   Routine  :  {ROUTINES_USED} / 5')
