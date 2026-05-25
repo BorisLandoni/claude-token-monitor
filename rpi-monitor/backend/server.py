@@ -1,7 +1,6 @@
 """
 Claude Monitor — RPi backend
-FastAPI server: token history, account limits, login, settings.
-Compatible with the same API format as server.js (port 3333).
+FastAPI server: account limits, login, settings.
 Default port: 8080
 """
 
@@ -99,7 +98,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title='Claude Monitor', lifespan=lifespan)
 
 
-# ── Token endpoints (compatible with server.js) ───────────────────────────────
+# ── Token endpoints ───────────────────────────────────────────────────────────
 
 class TokenEvent(BaseModel):
     input_tokens: int = 0
