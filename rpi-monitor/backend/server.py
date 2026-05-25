@@ -74,6 +74,8 @@ def process_account_limits(limits: dict):
     store.save()
     spct = store.account.get('session_pct_used')
     remain = store.account.get('messages_remaining')
+    if spct is not None:
+        store.add_sample(spct)
     print(f"[account] sessione:{spct}% usato | rimasti:{remain} | piano:{store.account['plan']}")
 
 
@@ -211,6 +213,11 @@ def get_account():
     if not store.account:
         return {'has_data': False}
     return {'has_data': True, **store.account}
+
+
+@app.get('/api/account/history')
+def get_account_history():
+    return store.get_session_history()
 
 
 # ── Login / session ───────────────────────────────────────────────────────────

@@ -135,6 +135,22 @@ body { background: var(--bg); color: var(--text); }
 .sp-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:4px; }
 #sparkline { display:block; width:100%; height:36px; }
 
+/* ── Bottone Aggiorna (touch-friendly) ───────────────────────────────────── */
+#now-refresh-btn {
+  width:100%; padding:14px 0; font-size:16px; font-weight:700;
+  letter-spacing:1.5px; border-radius:10px;
+  background:var(--surface); border:2px solid var(--border2);
+  color:var(--cyan); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  transition:background .15s, border-color .15s, filter .1s;
+  -webkit-tap-highlight-color: transparent;
+}
+#now-refresh-btn:hover  { background:var(--surface2); border-color:var(--cyan); }
+#now-refresh-btn:active { filter:brightness(.8); }
+#now-refresh-btn.loading { color:var(--muted); border-color:var(--border); cursor:default; }
+.spin-icon { display:inline-block; }
+#now-refresh-btn.loading .spin-icon { animation:spin .6s linear infinite; }
+
 /* ══════════════════════════════════════════════════════════════════════════
    CREDITI PAGE
    ═════════════════════════════════════════════════════════════════════════ */
@@ -372,9 +388,9 @@ body { background: var(--bg); color: var(--text); }
         </div>
       </div>
 
-      <!-- Sparkline 24h -->
+      <!-- Sparkline sessione 24h -->
       <div class="sparkline-section">
-        <div class="sp-label">COSTO ULTIME 24 ORE</div>
+        <div class="sp-label">UTILIZZO SESSIONE · 24 ORE</div>
         <canvas id="sparkline" width="312" height="36"></canvas>
       </div>
     </div>
@@ -420,6 +436,11 @@ body { background: var(--bg); color: var(--text); }
           <div id="routine-fill" class="slim-fill" style="width:0%;background:var(--cyan)"></div>
         </div>
       </div>
+
+      <!-- Aggiorna -->
+      <button id="now-refresh-btn" onclick="nowRefresh()">
+        <span class="spin-icon">⟳</span> AGGIORNA
+      </button>
 
       <!-- Footer -->
       <div class="now-footer">
@@ -652,6 +673,7 @@ let currentPage    = 'now';
 let sessionResetTs = null;
 let refreshTimer   = null;
 let hourlyData     = [];
+let sessionHistory = [];   // [{ts, pct}] — campioni session % per sparkline
 let alertShownAt   = 0;
 let alertDismissTs = 0;
 let setupPollTimer = null;
@@ -720,54 +742,79 @@ function renderTimeline() {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   SPARKLINE
+   SPARKLINE — area chart del % sessione usato nelle ultime 24 ore
    ════════════════════════════════════════════════════════════════════════ */
 function drawSparkline() {
   const canvas = document.getElementById('sparkline');
   if (!canvas) return;
-  const ctx  = canvas.getContext('2d');
-  const W    = canvas.width;
-  const H    = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const W   = canvas.width;
+  const H   = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
   const style  = getComputedStyle(document.documentElement);
   const cMuted = style.getPropertyValue('--muted').trim();
   const cBorder= style.getPropertyValue('--border').trim();
 
-  // Baseline
+  // Baseline sempre visibile
   ctx.strokeStyle = cBorder;
   ctx.lineWidth   = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, H - 0.5);
-  ctx.lineTo(W, H - 0.5);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, H - 0.5); ctx.lineTo(W, H - 0.5); ctx.stroke();
 
-  const hasData = hourlyData.length > 0 && hourlyData.some(h => h.cost > 0);
-  if (!hasData) {
-    ctx.fillStyle  = cMuted;
-    ctx.font       = '10px system-ui, sans-serif';
-    ctx.textAlign  = 'center';
+  // Prendi gli ultimi 48 campioni al massimo (non servono di più sulla larghezza)
+  const pts = sessionHistory.slice(-48);
+  if (pts.length < 2) {
+    ctx.fillStyle    = cMuted;
+    ctx.font         = '10px system-ui, sans-serif';
+    ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Nessun dato — collega hook Claude Code', W / 2, H / 2 - 1);
+    ctx.fillText(
+      pts.length === 0 ? 'Accumulo dati… (aggiorna tra qualche minuto)'
+                       : 'Accumulo dati…',
+      W / 2, H / 2 - 1
+    );
     return;
   }
 
-  const cCyan  = style.getPropertyValue('--cyan').trim();
-  const cAmber = style.getPropertyValue('--amber').trim();
-  const maxCost = Math.max(...hourlyData.map(h => h.cost), 1e-9);
-  const n       = hourlyData.length;
-  const barW    = W / n;
+  // Colori dinamici in base al valore corrente
+  const lastPct = pts[pts.length - 1].pct;
+  const baseColor = lastPct < 50 ? '--cyan' : lastPct < 75 ? '--amber' : '--red';
+  const cLine = style.getPropertyValue(baseColor).trim();
 
-  hourlyData.forEach((h, i) => {
-    const barH = h.cost > 0 ? Math.max(3, Math.round(h.cost / maxCost * (H - 4))) : 0;
-    if (!barH) return;
-    const x = Math.round(i * barW);
-    const w = Math.max(1, Math.round(barW) - 1);
-    ctx.globalAlpha = i === n - 1 ? 1 : 0.55;
-    ctx.fillStyle   = i === n - 1 ? cAmber : cCyan;
-    ctx.fillRect(x, H - barH, w, barH);
-  });
-  ctx.globalAlpha = 1;
+  const n  = pts.length;
+  const dx = W / (n - 1);
+  const PAD = 3;   // pixel di margine verticale
+
+  // Coordinata Y da percentuale (pct=0 → fondo, pct=100 → cima)
+  const yOf = pct => H - PAD - (pct / 100) * (H - PAD * 2);
+
+  // Area riempita (gradiente semitrasparente)
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, cLine.replace(')', ', 0.35)').replace('rgb', 'rgba'));
+  grad.addColorStop(1, cLine.replace(')', ', 0.03)').replace('rgb', 'rgba'));
+
+  ctx.beginPath();
+  ctx.moveTo(0, H);
+  pts.forEach((p, i) => ctx.lineTo(i * dx, yOf(p.pct)));
+  ctx.lineTo((n - 1) * dx, H);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Linea superiore
+  ctx.beginPath();
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(0, yOf(p.pct)) : ctx.lineTo(i * dx, yOf(p.pct)));
+  ctx.strokeStyle = cLine;
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  // Punto finale (ora)
+  const lx = (n - 1) * dx;
+  const ly = yOf(lastPct);
+  ctx.beginPath();
+  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.fillStyle = cLine;
+  ctx.fill();
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -795,19 +842,35 @@ function dismissAlert() {
   document.getElementById('alert-overlay').classList.remove('show');
 }
 
+async function nowRefresh() {
+  const btn = document.getElementById('now-refresh-btn');
+  if (btn.classList.contains('loading')) return;
+  btn.classList.add('loading');
+  btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNAMENTO…';
+  try {
+    await fetch('/api/poll', { method: 'POST' });
+    await loadData();
+  } catch(e) { /* ignore */ } finally {
+    btn.classList.remove('loading');
+    btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
+  }
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
    DATA LOADING
    ════════════════════════════════════════════════════════════════════════ */
 async function loadData() {
   try {
-    const [account, settings, session, hourly] = await Promise.all([
+    const [account, settings, session, hourly, history] = await Promise.all([
       fetch('/api/account').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/session').then(r => r.json()),
       fetch('/api/tokens/hourly').then(r => r.json()),
+      fetch('/api/account/history').then(r => r.json()).catch(() => []),
     ]);
     DATA = { account, settings, session };
-    hourlyData     = Array.isArray(hourly) ? hourly : [];
+    hourlyData     = Array.isArray(hourly)  ? hourly  : [];
+    sessionHistory = Array.isArray(history) ? history : [];
     sessionResetTs = account.session_resets_at_ts || account.reset_at_ts || null;
     applyTheme(settings.theme || 'dark');
     render();

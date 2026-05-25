@@ -17,8 +17,9 @@ PRICE_PER_M = {
 
 IT_DAYS = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
 
-history: list[dict] = []
-account: Optional[dict] = None
+history:  list[dict] = []
+samples:  list[dict] = []   # {'ts': int, 'pct': float}  — session % history
+account:  Optional[dict] = None
 settings: dict = {
     'poll_interval': 60,
     'theme': 'dark',
@@ -27,26 +28,51 @@ settings: dict = {
 
 
 def load():
-    global history, account, settings
+    global history, samples, account, settings
     try:
         if DATA_FILE.exists():
             d = json.loads(DATA_FILE.read_text())
             history = d.get('history', [])
+            samples = d.get('samples', [])
             account = d.get('account', None)
             settings.update(d.get('settings', {}))
-            print(f'Caricati {len(history)} eventi + dati account')
+            print(f'Caricati {len(history)} eventi, {len(samples)} sample + dati account')
     except Exception as e:
         print(f'Caricamento fallito: {e}')
 
 
 def save():
-    global history
+    global history, samples
     try:
         if len(history) > 100_000:
             history = history[-100_000:]
-        DATA_FILE.write_text(json.dumps({'history': history, 'account': account, 'settings': settings}))
+        DATA_FILE.write_text(json.dumps({
+            'history': history,
+            'samples': samples,
+            'account': account,
+            'settings': settings,
+        }))
     except Exception as e:
         print(f'Salvataggio fallito: {e}')
+
+
+def add_sample(session_pct_used: float) -> None:
+    """Registra un campione di utilizzo sessione per la sparkline storica."""
+    global samples
+    now_ts = int(time.time())
+    # Al massimo un punto ogni 5 minuti (evita duplicati su poll rapidi)
+    if samples and (now_ts - samples[-1]['ts']) < 300:
+        samples[-1] = {'ts': now_ts, 'pct': round(session_pct_used, 1)}
+    else:
+        samples.append({'ts': now_ts, 'pct': round(session_pct_used, 1)})
+    # Mantieni solo le ultime 24 ore
+    cutoff = now_ts - 86_400
+    samples = [s for s in samples if s['ts'] >= cutoff]
+
+
+def get_session_history() -> list[dict]:
+    """Restituisce i campioni di sessione % delle ultime 24 ore."""
+    return list(samples)
 
 
 def calc_cost(event: dict) -> float:
