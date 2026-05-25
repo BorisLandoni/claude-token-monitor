@@ -1,6 +1,6 @@
 # Claude Token Monitor
 
-Monitor l'utilizzo del tuo account Claude.ai — percentuale sessione, countdown reset, token per messaggio e costo stimato — su un **Raspberry Pi con display touch 5"**, senza consumare un singolo token.
+Monitor l'utilizzo del tuo account Claude.ai — percentuale sessione, countdown reset e limiti settimanali — su un **Raspberry Pi con display touch 5"**, senza consumare un singolo token.
 
 ---
 
@@ -19,7 +19,7 @@ Claude.ai (web / desktop / mobile / VS Code)
        │        3. DOM scraping              (fallback testo pagina)
        ▼
 ┌──────────────────────────────────┐
-│  Raspberry Pi 4  ·  FastAPI :8080 │  ◄── Tampermonkey può inviare token/msg
+│  Raspberry Pi 4  ·  FastAPI :8080 │
 │  rpi-monitor/backend/server.py   │
 └────────────────┬─────────────────┘
                  │
@@ -92,7 +92,7 @@ rpi-monitor/
 
 | Pagina | Contenuto |
 |---|---|
-| **ADESSO** | Arc gauge sessione corrente (%), countdown reset, limiti settimanali, token e costo sessione |
+| **ADESSO** | Arc gauge sessione corrente (%), countdown reset, limiti settimanali |
 | **ORA** | Grafico 24 h a barre — input (ciano) / output (verde) |
 | **GIORNO** | Grafico ultimi 7 giorni |
 | **SETTIMANA** | Grafico ultime 4 settimane |
@@ -114,38 +114,12 @@ Il backend legge da `claude.ai/settings › Utilizzo`:
 
 - **Sessione corrente**: % usato, % rimanente, countdown reset (es. "Si ripristina tra 3 h 38 min")
 - **Settimanale**: % usato, giorno/ora reset (es. "sab 17:59")
-- **Token per messaggio**: input, output, cache read, cache creation (via Tampermonkey)
-- **Costo stimato** in USD — prezzi claude-sonnet-4-x:
-
-| Tipo token | Prezzo per 1 M token |
-|---|---|
-| Input | $3.00 |
-| Output | $15.00 |
-| Cache read | $0.30 |
-| Cache creation | $3.75 |
-
----
-
-## Tampermonkey (opzionale — token per messaggio)
-
-Senza Tampermonkey il monitor mostra solo i dati di utilizzo da `claude.ai/settings` (percentuali sessione/settimanale e reset timer). Per aggiungere il conteggio token per singolo messaggio e il costo stimato in tempo reale, installa lo userscript:
-
-1. Installa l'estensione [Tampermonkey](https://www.tampermonkey.net/) nel browser
-2. Crea un nuovo script e incolla il contenuto di `rpi-monitor/browser-extension/claude_monitor.user.js`  
-   *(o installalo direttamente dalla URL raw del file)*
-3. Nello script, imposta l'URL del server:
-   ```js
-   const SERVER_URL = 'http://IP-del-RPi:8080';
-   ```
-4. Salva e ricarica claude.ai
-
-Lo userscript intercetta i completamenti dell'API claude.ai e invia i token a `POST /api/tokens` del backend.
 
 ---
 
 ## API REST
 
-Il backend espone le stesse API del server Node.js originale (porta 3333), rendendo lo userscript compatibile senza modifiche.
+Il backend espone un'API REST sulla porta 8080.
 
 ### Account e utilizzo
 
@@ -156,17 +130,6 @@ Il backend espone le stesse API del server Node.js originale (porta 3333), rende
 | `POST` | `/api/login` | Login Playwright — body: `{"email":"…","password":"…"}` |
 | `POST` | `/api/logout` | Cancella cookie e dati account |
 | `POST` | `/api/poll` | Forza un poll immediato |
-
-### Token
-
-| Metodo | Endpoint | Descrizione |
-|---|---|---|
-| `GET` | `/api/tokens` | Totali sessione (input, output, cache, costo) |
-| `POST` | `/api/tokens` | Aggiungi evento token (da Tampermonkey) |
-| `DELETE` | `/api/tokens` | Azzera la storia sessione |
-| `GET` | `/api/tokens/hourly` | Aggregato per ora — ultime 24 h |
-| `GET` | `/api/tokens/daily` | Aggregato per giorno — ultimi 7 giorni |
-| `GET` | `/api/tokens/weekly` | Aggregato per settimana — ultime 4 settimane |
 
 ### Impostazioni
 
@@ -184,11 +147,6 @@ curl http://raspberrypi.local:8080/api/account | python3 -m json.tool
 
 # Forza aggiornamento immediato
 curl -X POST http://raspberrypi.local:8080/api/poll
-
-# Invia manualmente un evento token
-curl -X POST http://raspberrypi.local:8080/api/tokens \
-  -H 'Content-Type: application/json' \
-  -d '{"input_tokens":1200,"output_tokens":350,"cache_read_tokens":0,"cache_creation_tokens":0}'
 
 # Cambia intervallo di polling a 2 minuti
 curl -X PUT http://raspberrypi.local:8080/api/settings \
