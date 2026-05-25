@@ -167,37 +167,66 @@ def extract_account_limits(obj, depth: int = 0) -> Optional[dict]:
 
 async def _scrape_settings_dom(page) -> Optional[dict]:
     """
-    Read usage percentages directly from the settings/utilizzo page text.
-    Handles Italian locale text like '77% utilizzato', 'Si ripristina tra 3 h 38 min'.
+    Read usage and billing data from the settings/utilizzo page text.
+    Page order of '% utilizzato': [0] session, [1] weekly all-models,
+                                   [2] Claude Design, [3] credits spent.
     """
     try:
         content = await page.text_content('body') or ''
         result: dict = {}
 
-        # Session: "XX% utilizzato" — first occurrence = session, second = weekly allmodels
+        # ── Usage percentages ────────────────────────────────────────────────
         pcts = re.findall(r'(\d+)%\s+utilizzato', content)
         if pcts:
             pct_used = int(pcts[0])
-            result['session_pct_used']       = pct_used
-            result['session_pct_remaining']  = 100 - pct_used
+            result['session_pct_used']      = pct_used
+            result['session_pct_remaining'] = 100 - pct_used
         if len(pcts) >= 2:
             wpct = int(pcts[1])
-            result['weekly_pct_used']        = wpct
-            result['weekly_pct_remaining']   = 100 - wpct
+            result['weekly_pct_used']       = wpct
+            result['weekly_pct_remaining']  = 100 - wpct
+        if len(pcts) >= 3:
+            dpct = int(pcts[2])
+            result['design_pct_used']       = dpct
+            result['design_pct_remaining']  = 100 - dpct
 
-        # Session reset: "Si ripristina tra X h Y min" or "Si ripristina tra Y min"
+        # ── Session reset: "Si ripristina tra X h Y min" ────────────────────
         m = re.search(r'ripristina tra\s+(?:(\d+)\s*h\s+)?(\d+)\s*min', content)
         if m:
             hours = int(m.group(1)) if m.group(1) else 0
             mins  = int(m.group(2))
             result['session_resets_at_ts'] = int(time.time()) + hours * 3600 + mins * 60
 
-        # Weekly reset: "Si ripristina [day] HH:MM" e.g. "Si ripristina sab 17:59"
+        # ── Weekly reset: "Si ripristina [day] HH:MM" ───────────────────────
         m2 = re.search(r'ripristina\s+(\w{3})\s+(\d{1,2}:\d{2})', content)
         if m2:
-            result['weekly_resets_day']  = m2.group(1)   # e.g. "sab"
-            result['weekly_resets_time'] = m2.group(2)   # e.g. "17:59"
+            result['weekly_resets_day']   = m2.group(1)
+            result['weekly_resets_time']  = m2.group(2)
             result['weekly_resets_label'] = f"{m2.group(1)} {m2.group(2)}"
+
+        # ── Credits spent: "X,XX € spesi" ───────────────────────────────────
+        m = re.search(r'([\d]+[,\.]?\d*)\s*€\s+spesi', content)
+        if m:
+            result['credits_spent_eur'] = float(m.group(1).replace(',', '.'))
+
+        # ── Credits reset: "Si ripristina il [Month Day]" ───────────────────
+        m = re.search(r'Si ripristina il\s+([\w]+ \d+|\d+ [\w]+)', content)
+        if m:
+            result['credits_reset_label'] = m.group(1).strip()
+
+        # ── Monthly spending limit: "17 € Limite di spesa mensile" ──────────
+        m = re.search(r'([\d]+[,\.]?\d*)\s*€\s+Limite di spesa', content, re.IGNORECASE)
+        if not m:
+            m = re.search(r'Limite di spesa[^\d]{0,40}([\d]+[,\.]?\d*)\s*€', content, re.IGNORECASE)
+        if m:
+            result['credits_limit_eur'] = float(m.group(1).replace(',', '.'))
+
+        # ── Account balance: "4,42 € Saldo attuale" ─────────────────────────
+        m = re.search(r'([\d]+[,\.]?\d*)\s*€\s+Saldo attuale', content, re.IGNORECASE)
+        if not m:
+            m = re.search(r'Saldo attuale\s+([\d]+[,\.]?\d*)\s*€', content, re.IGNORECASE)
+        if m:
+            result['credits_balance_eur'] = float(m.group(1).replace(',', '.'))
 
         return result if result else None
     except Exception as e:
