@@ -74,24 +74,25 @@ body { background: var(--bg); color: var(--text); }
 #page-now { flex-direction:row; }
 
 .now-gauge-col {
-  width:360px; min-width:360px;
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  padding: 10px 16px;
+  width:340px; min-width:340px;
+  display:flex; flex-direction:column; align-items:center;
+  padding: 10px 14px 8px;
   border-right: 1px solid var(--border);
+  overflow: hidden;
 }
 .gauge-section-label {
   font-size:10px; font-weight:700; letter-spacing:2.5px; color:var(--muted);
-  margin-bottom:6px; align-self:flex-start;
+  margin-bottom:4px; align-self:flex-start;
 }
-.gauge-wrap { width:220px; height:180px; position:relative; flex-shrink:0; }
+.gauge-wrap { width:210px; height:168px; position:relative; flex-shrink:0; }
 .gauge-wrap svg { width:100%; height:100%; overflow:visible; }
 
-.g-num   { font-size:42px; font-weight:800; font-variant-numeric:tabular-nums; }
+.g-num   { font-size:40px; font-weight:800; font-variant-numeric:tabular-nums; }
 .g-label { font-size:12px; font-weight:500; fill:var(--muted); }
 .g-used  { font-size:11px; fill:var(--muted); }
 
 .gauge-countdown {
-  margin-top:8px; font-size:15px; font-weight:600;
+  margin-top:4px; font-size:13px; font-weight:600;
   color:var(--amber); letter-spacing:.5px; text-align:center;
 }
 .gauge-countdown.ok  { color:var(--green); }
@@ -99,7 +100,7 @@ body { background: var(--bg); color: var(--text); }
 
 .now-stats-col {
   flex:1; display:flex; flex-direction:column;
-  padding:14px 16px; gap:10px;
+  padding:14px 16px; gap:10px; overflow:hidden;
 }
 
 .weekly-box {
@@ -121,6 +122,19 @@ body { background: var(--bg); color: var(--text); }
 }
 #session-status { font-weight:700; font-size:12px; }
 
+/* ── Session Timeline ────────────────────────────────────────────────────── */
+.timeline-section { width:100%; margin-top:6px; }
+.tl-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:4px; }
+.tl-bar   { height:12px; background:var(--surface2); border:1px solid var(--border);
+            border-radius:6px; overflow:hidden; }
+.tl-fill  { height:100%; border-radius:6px; transition:width .9s ease, background .4s ease; min-width:3px; }
+.tl-times { display:flex; justify-content:space-between; margin-top:3px; font-size:10px; color:var(--muted2); }
+
+/* ── Sparkline ───────────────────────────────────────────────────────────── */
+.sparkline-section { width:100%; margin-top:6px; }
+.sp-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:4px; }
+#sparkline { display:block; width:100%; height:36px; }
+
 /* ══════════════════════════════════════════════════════════════════════════
    CREDITI PAGE
    ═════════════════════════════════════════════════════════════════════════ */
@@ -132,27 +146,15 @@ body { background: var(--bg); color: var(--text); }
 }
 .crediti-col + .crediti-col { border-left:1px solid var(--border); }
 
-.crediti-amount-row {
-  display:flex; align-items:baseline; gap:6px;
-}
-.crediti-big {
-  font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--amber);
-}
+.crediti-amount-row { display:flex; align-items:baseline; gap:6px; }
+.crediti-big { font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--amber); }
 .crediti-big.green { color:var(--green); }
-.crediti-limit {
-  font-size:16px; color:var(--muted); font-variant-numeric:tabular-nums;
-}
+.crediti-limit { font-size:16px; color:var(--muted); font-variant-numeric:tabular-nums; }
 .crediti-pct { font-size:11px; color:var(--muted); margin-top:2px; }
 
-.crediti-balance {
-  font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--green);
-}
-.crediti-reset-label {
-  font-size:22px; font-weight:700; color:var(--cyan);
-}
-.crediti-no-data {
-  font-size:13px; color:var(--muted); line-height:1.6;
-}
+.crediti-balance { font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--green); }
+.crediti-reset-label { font-size:22px; font-weight:700; color:var(--cyan); }
+.crediti-no-data { font-size:13px; color:var(--muted); line-height:1.6; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    SETTINGS PAGE
@@ -160,7 +162,7 @@ body { background: var(--bg); color: var(--text); }
 #page-settings { flex-direction:row; gap:0; padding:0; }
 
 .settings-col {
-  flex:1; padding:16px; display:flex; flex-direction:column; gap:10px;
+  flex:1; padding:12px; display:flex; flex-direction:column; gap:8px;
   overflow-y:auto;
 }
 .settings-col + .settings-col { border-left:1px solid var(--border); }
@@ -169,7 +171,7 @@ body { background: var(--bg); color: var(--text); }
 
 #login-status {
   background:var(--surface); border:1px solid var(--border);
-  border-radius:8px; padding:9px 12px; font-size:12px; line-height:1.5;
+  border-radius:8px; padding:9px 12px; font-size:12px; line-height:1.6;
 }
 .s-ok  { color:var(--green);  }
 .s-err { color:var(--red);    }
@@ -225,6 +227,28 @@ body { background: var(--bg); color: var(--text); }
 }
 .info-card strong { color:var(--cyan); }
 
+.expand-toggle {
+  cursor:pointer; font-size:12px; color:var(--muted);
+  padding:5px 0; list-style:none;
+  display:flex; align-items:center; gap:6px; user-select:none;
+}
+.expand-toggle::-webkit-details-marker { display:none; }
+.expand-toggle .et-title { color:var(--cyan); font-weight:600; }
+.expand-panel {
+  margin-top:6px; padding:10px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:8px; font-size:11px; color:var(--muted); line-height:1.6;
+}
+
+/* Setup log terminal */
+#setup-log {
+  background:var(--bg); border:1px solid var(--border2);
+  border-radius:6px; padding:8px;
+  font-family:monospace; font-size:10px; color:var(--green);
+  max-height:100px; overflow-y:auto; white-space:pre-wrap;
+  margin-top:8px; display:none;
+}
+
 /* ── Bottom nav ──────────────────────────────────────────────────────────── */
 .nav-tab {
   flex:1; display:flex; flex-direction:column; align-items:center;
@@ -237,18 +261,6 @@ body { background: var(--bg); color: var(--text); }
 .nav-tab:hover:not(.active) { color:var(--text); }
 .nav-icon  { font-size:16px; line-height:1; }
 .nav-label { font-size:10px; font-weight:600; letter-spacing:.8px; }
-
-/* ── Session Timeline ────────────────────────────────────────────────────── */
-.timeline-section { width:320px; margin-top:6px; }
-.tl-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:5px; }
-.tl-bar   { height:10px; background:var(--surface2); border-radius:5px; overflow:hidden; }
-.tl-fill  { height:100%; border-radius:5px; transition:width .9s ease, background .4s ease; }
-.tl-times { display:flex; justify-content:space-between; margin-top:4px; font-size:10px; color:var(--muted2); }
-
-/* ── Sparkline ───────────────────────────────────────────────────────────── */
-.sparkline-section { width:320px; margin-top:6px; }
-.sp-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:5px; }
-#sparkline { display:block; width:320px; height:38px; }
 
 /* ── Alert basso utilizzo ────────────────────────────────────────────────── */
 #alert-overlay {
@@ -303,7 +315,7 @@ body { background: var(--bg); color: var(--text); }
   <!-- ─── NOW ─────────────────────────────────────────────────────────────── -->
   <div id="page-now" class="page">
 
-    <!-- Left: arc gauge -->
+    <!-- Left: arc gauge + timeline + sparkline -->
     <div class="now-gauge-col">
       <div class="gauge-section-label">SESSIONE CORRENTE</div>
 
@@ -348,26 +360,26 @@ body { background: var(--bg); color: var(--text); }
 
       <div id="countdown" class="gauge-countdown">—</div>
 
-      <!-- Timeline sessione -->
+      <!-- Timeline sessione 5h -->
       <div class="timeline-section">
         <div class="tl-label">FINESTRA SESSIONE · 5 ORE</div>
         <div class="tl-bar">
-          <div id="tl-fill" class="tl-fill" style="width:0%;background:var(--green)"></div>
+          <div id="tl-fill" class="tl-fill" style="width:2%;background:var(--muted2)"></div>
         </div>
         <div class="tl-times">
-          <span id="tl-start">—</span>
-          <span id="tl-end">—</span>
+          <span id="tl-start">in attesa dati…</span>
+          <span id="tl-end">↺</span>
         </div>
       </div>
 
       <!-- Sparkline 24h -->
       <div class="sparkline-section">
         <div class="sp-label">COSTO ULTIME 24 ORE</div>
-        <canvas id="sparkline" width="320" height="38"></canvas>
+        <canvas id="sparkline" width="312" height="36"></canvas>
       </div>
     </div>
 
-    <!-- Right: weekly + Claude Design -->
+    <!-- Right: weekly + Claude Design + routine -->
     <div class="now-stats-col">
 
       <!-- Weekly -->
@@ -420,7 +432,6 @@ body { background: var(--bg); color: var(--text); }
   <!-- ─── CREDITI ──────────────────────────────────────────────────────────── -->
   <div id="page-crediti" class="page">
 
-    <!-- Left: spending -->
     <div class="crediti-col">
       <div class="box-title">SPESA MENSILE</div>
       <div class="crediti-amount-row">
@@ -433,13 +444,12 @@ body { background: var(--bg); color: var(--text); }
       <div id="cr-pct" class="crediti-pct">—</div>
 
       <div id="cr-nodata" class="crediti-no-data" style="display:none">
-        I dati crediti vengono letti dalla pagina Impostazioni di Claude.ai
-        durante il login e aggiornati ad ogni polling con Playwright.<br><br>
-        Se vuoi aggiornare adesso: <strong>Impostazioni → Aggiorna Adesso</strong>
+        I dati crediti vengono letti tramite OAuth.<br><br>
+        Se il valore non appare, forza un aggiornamento:<br>
+        <strong>Impostazioni → Aggiorna Adesso</strong>
       </div>
     </div>
 
-    <!-- Right: balance + reset -->
     <div class="crediti-col">
       <div class="box-title">SALDO DISPONIBILE</div>
       <div id="cr-balance" class="crediti-balance">—</div>
@@ -454,6 +464,7 @@ body { background: var(--bg); color: var(--text); }
   <!-- ─── SETTINGS ─────────────────────────────────────────────────────────── -->
   <div id="page-settings" class="page">
 
+    <!-- Colonna sinistra: ACCESSO -->
     <div class="settings-col">
       <div class="settings-title">ACCESSO CLAUDE</div>
       <div id="login-status" class="info-card"><span class="s-inf">○ Verifica in corso…</span></div>
@@ -462,20 +473,23 @@ body { background: var(--bg); color: var(--text); }
         ⟳ &nbsp;Aggiorna Adesso
       </button>
 
-      <details style="margin-top:6px">
-        <summary style="cursor:pointer;font-size:12px;color:var(--muted);padding:6px 0">
-          <span style="color:var(--cyan)">+ Importa cookie da Chrome</span>
-          <span style="color:var(--muted2)">&nbsp;(per Claude Design e Routine)</span>
+      <!-- Import cookie -->
+      <details>
+        <summary class="expand-toggle">
+          <span class="et-title">+ Importa cookie da Chrome</span>
+          <span style="color:var(--muted2)">(per Design e Routine)</span>
         </summary>
-        <div style="margin-top:8px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--muted);line-height:1.5">
+        <div class="expand-panel">
           <b style="color:var(--text)">L'OAuth fornisce sessione, weekly e crediti.</b><br>
-          Per vedere anche <b>Claude Design %</b> e <b>routine giornaliere</b>:<br>
-          1. Apri <b>claude.ai</b> in Chrome (dove sei loggato)<br>
-          2. Premi <b>F12</b> → tab <b>Network</b> → <b>F5</b><br>
-          3. Clicca una richiesta a <i>claude.ai</i> → tasto destro → <b>Copy as cURL (bash)</b><br>
-          4. Incolla qui sotto e clicca Importa
-          <textarea id="cookie-text" rows="3" placeholder="curl 'https://claude.ai/...' -H 'Cookie: sessionKey=...'"
-            style="width:100%;margin-top:8px;background:var(--bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;padding:8px;font-family:monospace;font-size:10px;resize:vertical"></textarea>
+          Per <b>Claude Design %</b> e <b>routine giornaliere</b>:<br>
+          1. Apri <b>claude.ai</b> in Chrome → <b>F12</b> → Network → F5<br>
+          2. Tasto destro su una richiesta → <b>Copy as cURL (bash)</b><br>
+          3. Incolla sotto e clicca Importa
+          <textarea id="cookie-text" rows="3"
+            placeholder="curl 'https://claude.ai/...' -H 'Cookie: sessionKey=...'"
+            style="width:100%;margin-top:8px;background:var(--bg);color:var(--text);
+                   border:1px solid var(--border2);border-radius:6px;padding:8px;
+                   font-family:monospace;font-size:10px;resize:vertical"></textarea>
           <button class="btn-secondary" style="margin-top:6px" onclick="importCookies()">
             Importa cookie
           </button>
@@ -487,6 +501,7 @@ body { background: var(--bg); color: var(--text); }
       </button>
     </div>
 
+    <!-- Colonna destra: PREFERENZE + SETUP -->
     <div class="settings-col">
       <div class="settings-title">PREFERENZE</div>
 
@@ -517,6 +532,45 @@ body { background: var(--bg); color: var(--text); }
         <strong>Accedi da PC o telefono:</strong><br>
         <strong id="server-url">http://raspberrypi.local:8080</strong>
       </div>
+
+      <!-- Setup RPi -->
+      <details id="setup-details">
+        <summary class="expand-toggle">
+          <span class="et-title">▶ Setup Raspberry Pi</span>
+          <span id="setup-avail-tag" style="color:var(--muted2)">caricamento…</span>
+        </summary>
+        <div class="expand-panel" style="line-height:1.7">
+          <b style="color:var(--text)">Cosa fa il setup automatico:</b><br>
+          <span style="color:var(--green)">1.</span> Installa Node.js LTS e <b>Claude Code</b><br>
+          <span style="color:var(--green)">2.</span> Lancia <code>claude login</code> (una volta sola)<br>
+          <span style="color:var(--green)">3.</span> Installa Python, Playwright e le dipendenze<br>
+          <span style="color:var(--green)">4.</span> Crea il servizio systemd (avvio automatico)<br>
+          <span style="color:var(--green)">5.</span> Configura Chromium in modalità kiosk<br>
+          <br>
+          <b style="color:var(--cyan)">Comando via SSH / terminale:</b><br>
+          <code id="setup-cmd" style="font-size:9.5px;word-break:break-all;
+            background:var(--bg);display:block;padding:5px 6px;border-radius:4px;
+            border:1px solid var(--border2);margin:4px 0;cursor:pointer"
+            onclick="copySetupCmd()" title="Clicca per copiare">
+            curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/claude/rpi-token-monitor/setup-rpi.sh | bash
+          </code>
+          <div id="copy-confirm" style="font-size:10px;color:var(--green);display:none">
+            ✓ Copiato negli appunti
+          </div>
+          <div id="setup-log"></div>
+          <button id="setup-btn" class="btn-primary" style="margin-top:8px"
+                  onclick="runSetupRpi()">
+            ▶ Esegui Setup su questo dispositivo
+          </button>
+          <div id="setup-login-hint"
+               style="display:none;margin-top:8px;padding:8px;background:var(--surface);
+                      border-radius:6px;font-size:11px;color:var(--amber);line-height:1.5">
+            ⚠ Dopo il setup apri un terminale e digita:<br>
+            <code style="color:var(--cyan)">claude login</code>
+          </div>
+        </div>
+      </details>
+
     </div>
   </div>
 
@@ -541,8 +595,7 @@ body { background: var(--bg); color: var(--text); }
 <!-- ── Loading overlay ────────────────────────────────────────────────────── -->
 <div id="overlay">
   <div class="spinner"></div>
-  <div id="overlay-msg" class="overlay-msg">Accesso in corso…<br>
-    <small style="opacity:.6">(circa 30-60 secondi)</small></div>
+  <div id="overlay-msg" class="overlay-msg">Caricamento…</div>
 </div>
 
 <!-- ── Alert utilizzo basso ───────────────────────────────────────────────── -->
@@ -561,7 +614,6 @@ body { background: var(--bg); color: var(--text); }
 const G_R    = 80;
 const G_CIRC = 2 * Math.PI * G_R;
 const G_ARC  = G_CIRC * (270 / 360);
-const G_GAP  = G_CIRC - G_ARC;
 
 function setGauge(pctUsed, colorVar) {
   const color   = getComputedStyle(document.documentElement).getPropertyValue(colorVar).trim();
@@ -602,6 +654,7 @@ let refreshTimer   = null;
 let hourlyData     = [];
 let alertShownAt   = 0;
 let alertDismissTs = 0;
+let setupPollTimer = null;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -625,7 +678,7 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 function renderCountdown(now) {
   const el = document.getElementById('countdown');
   if (!el) return;
-  if (!sessionResetTs) { el.textContent = '—'; el.className = 'gauge-countdown'; return; }
+  if (!sessionResetTs) { el.textContent = 'in attesa dati…'; el.className = 'gauge-countdown'; return; }
   const secs = sessionResetTs - Math.floor(now.getTime() / 1000);
   if (secs <= 0) { el.textContent = 'Reset imminente'; el.className = 'gauge-countdown'; return; }
   const h = Math.floor(secs / 3600);
@@ -640,10 +693,16 @@ function renderCountdown(now) {
 }
 
 function renderTimeline() {
+  const fill  = document.getElementById('tl-fill');
+  const start = document.getElementById('tl-start');
+  const end   = document.getElementById('tl-end');
+  if (!fill) return;
+
   if (!sessionResetTs) {
-    setStyle('tl-fill', 'width', '0%');
-    setText('tl-start', '—');
-    setText('tl-end',   '—');
+    fill.style.width      = '2%';
+    fill.style.background = 'var(--muted2)';
+    if (start) start.textContent = 'in attesa dati…';
+    if (end)   end.textContent   = '↺';
     return;
   }
   const SESSION_SECS = 5 * 3600;
@@ -651,31 +710,56 @@ function renderTimeline() {
   const startTs = sessionResetTs - SESSION_SECS;
   const elapsed = Math.max(0, nowTs - startTs);
   const pct     = Math.min(100, Math.round(elapsed / SESSION_SECS * 100));
-  const color   = pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--green)';
-  setStyle('tl-fill', 'width',      pct + '%');
-  setStyle('tl-fill', 'background', color);
-  const fmt = ts => new Date(ts * 1000).toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
-  setText('tl-start', fmt(startTs));
-  setText('tl-end',   fmt(sessionResetTs) + ' ↺');
+  const color   = pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--cyan)';
+  fill.style.width      = Math.max(2, pct) + '%';
+  fill.style.background = color;
+  const fmt = ts => new Date(ts * 1000).toLocaleTimeString('it-IT',
+    { hour:'2-digit', minute:'2-digit' });
+  if (start) start.textContent = fmt(startTs);
+  if (end)   end.textContent   = fmt(sessionResetTs) + ' ↺';
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   SPARKLINE
+   ════════════════════════════════════════════════════════════════════════ */
 function drawSparkline() {
   const canvas = document.getElementById('sparkline');
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
+  const ctx  = canvas.getContext('2d');
+  const W    = canvas.width;
+  const H    = canvas.height;
   ctx.clearRect(0, 0, W, H);
-  if (!hourlyData.length) return;
 
-  const style   = getComputedStyle(document.documentElement);
-  const cCyan   = style.getPropertyValue('--cyan').trim();
-  const cAmber  = style.getPropertyValue('--amber').trim();
+  const style  = getComputedStyle(document.documentElement);
+  const cMuted = style.getPropertyValue('--muted').trim();
+  const cBorder= style.getPropertyValue('--border').trim();
+
+  // Baseline
+  ctx.strokeStyle = cBorder;
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, H - 0.5);
+  ctx.lineTo(W, H - 0.5);
+  ctx.stroke();
+
+  const hasData = hourlyData.length > 0 && hourlyData.some(h => h.cost > 0);
+  if (!hasData) {
+    ctx.fillStyle  = cMuted;
+    ctx.font       = '10px system-ui, sans-serif';
+    ctx.textAlign  = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Nessun dato — collega hook Claude Code', W / 2, H / 2 - 1);
+    return;
+  }
+
+  const cCyan  = style.getPropertyValue('--cyan').trim();
+  const cAmber = style.getPropertyValue('--amber').trim();
   const maxCost = Math.max(...hourlyData.map(h => h.cost), 1e-9);
-  const n = hourlyData.length;
-  const barW = W / n;
+  const n       = hourlyData.length;
+  const barW    = W / n;
 
   hourlyData.forEach((h, i) => {
-    const barH = h.cost > 0 ? Math.max(2, Math.round(h.cost / maxCost * (H - 2))) : 0;
+    const barH = h.cost > 0 ? Math.max(3, Math.round(h.cost / maxCost * (H - 4))) : 0;
     if (!barH) return;
     const x = Math.round(i * barW);
     const w = Math.max(1, Math.round(barW) - 1);
@@ -686,15 +770,20 @@ function drawSparkline() {
   ctx.globalAlpha = 1;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   ALERT
+   ════════════════════════════════════════════════════════════════════════ */
 function checkAlert() {
   const pctUsed = (DATA.account || {}).session_pct_used;
   if (pctUsed == null) return;
   const now     = Date.now();
   const overlay = document.getElementById('alert-overlay');
-  if (pctUsed > 90 && (now - alertShownAt) > ALERT_COOLDOWN_MS && alertDismissTs <= alertShownAt) {
+  if (pctUsed > 90
+      && (now - alertShownAt) > ALERT_COOLDOWN_MS
+      && alertDismissTs <= alertShownAt) {
     alertShownAt = now;
     overlay.classList.add('show');
-    setTimeout(dismissAlert, 6000);
+    setTimeout(dismissAlert, 8000);
   } else if (pctUsed <= 80) {
     alertShownAt = 0; alertDismissTs = 0;
     overlay.classList.remove('show');
@@ -744,6 +833,7 @@ function go(page) {
   document.getElementById(`page-${page}`).classList.add('active');
   document.querySelector(`.nav-tab[data-page="${page}"]`).classList.add('active');
   render();
+  if (page === 'now') drawSparkline();
 }
 
 function render() {
@@ -760,7 +850,7 @@ function render() {
 function renderNow() {
   const acc = DATA.account || {};
 
-  /* ── Session gauge ────────────────────────────────────────────────────── */
+  // Session gauge
   let pctUsed = null;
   if (acc.session_pct_used != null) {
     pctUsed = acc.session_pct_used;
@@ -777,10 +867,10 @@ function renderNow() {
         : 'rimasto';
   } else {
     clearGauge();
-    document.getElementById('g-sublabel').textContent = 'nessun dato';
+    document.getElementById('g-sublabel').textContent = 'in attesa…';
   }
 
-  /* ── Weekly ───────────────────────────────────────────────────────────── */
+  // Weekly
   const wPct = acc.weekly_pct_used;
   if (wPct != null) {
     const wRemain = acc.weekly_pct_remaining ?? (100 - wPct);
@@ -797,7 +887,7 @@ function renderNow() {
     setText('weekly-meta', 'Accedi per vedere i limiti settimanali');
   }
 
-  /* ── Claude Design ────────────────────────────────────────────────────── */
+  // Claude Design
   const designBox = document.getElementById('design-box');
   if (acc.design_pct_used != null) {
     designBox.style.display = '';
@@ -813,7 +903,7 @@ function renderNow() {
     designBox.style.display = 'none';
   }
 
-  /* ── Routine giornaliere ──────────────────────────────────────────────── */
+  // Routine giornaliere
   const routineBox = document.getElementById('routine-box');
   if (acc.routines_limit != null) {
     routineBox.style.display = '';
@@ -831,12 +921,12 @@ function renderNow() {
     routineBox.style.display = 'none';
   }
 
-  /* ── Footer ───────────────────────────────────────────────────────────── */
+  // Footer
   const s  = DATA.session || {};
   const st = document.getElementById('session-status');
   if (s.logged_in && (acc.session_status || 'ok') === 'ok') {
     st.textContent = '● Connesso'; st.style.color = 'var(--green)';
-  } else if (acc.session_status === 'expired') {
+  } else if (acc.session_status === 'expired' || acc.session_status === 'oauth_expired') {
     st.textContent = '⚠ Sessione scaduta'; st.style.color = 'var(--red)';
   } else {
     st.textContent = '○ Non connesso'; st.style.color = 'var(--red)';
@@ -871,14 +961,9 @@ function renderCrediti() {
   }
   nodata.style.display = 'none';
 
-  // Spending
   const spentStr = spent != null ? fmtEur(spent) : '—';
   setText('cr-spent', spentStr);
-  setStyle('cr-spent', 'color',
-    (spent != null && limit != null && spent / limit > 0.75) ? 'var(--red)' :
-    (spent != null && limit != null && spent / limit > 0.50) ? 'var(--amber)' :
-    'var(--amber)');
-
+  setStyle('cr-spent', 'color', 'var(--amber)');
   setText('cr-limit', limit != null ? `/ ${fmtEur(limit)}` : '');
 
   if (spent != null && limit != null && limit > 0) {
@@ -892,11 +977,8 @@ function renderCrediti() {
     setText('cr-pct', '');
   }
 
-  // Balance
   setText('cr-balance', bal != null ? fmtEur(bal) : '—');
-
-  // Reset
-  setText('cr-reset', reset || '—');
+  setText('cr-reset',   reset || '—');
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -907,38 +989,135 @@ function renderSettings() {
   const cfg = DATA.settings || {};
   const acc = DATA.account  || {};
 
-  const el = document.getElementById('login-status');
+  // Auth status
+  const el    = document.getElementById('login-status');
   const lines = [];
 
-  // OAuth status (primario)
   if (s.oauth_available) {
     if (acc.session_status === 'oauth_expired') {
-      lines.push('<span class="s-err">⚠ OAuth scaduto — esegui <code>claude /login</code></span>');
+      lines.push('<span class="s-err">⚠ OAuth scaduto — esegui <code>claude login</code></span>');
     } else {
-      lines.push('<span class="s-ok">● OAuth Claude Code attivo</span>');
+      lines.push('<span class="s-ok">● OAuth Claude Code: attivo</span>');
     }
   } else {
-    lines.push('<span class="s-err">✗ OAuth Claude Code non trovato</span>'
-      + '<br><small style="opacity:.7">Installa Claude Code ed esegui <code>claude /login</code></small>');
+    lines.push(
+      '<span class="s-err">✗ Claude Code non trovato</span>' +
+      '<br><small style="opacity:.7">Installa Claude Code: <code>claude login</code></small>'
+    );
   }
 
-  // Cookie status (secondario opzionale)
   if (s.cookies_available) {
     const age = s.cookie_age_hours ? ` (${s.cookie_age_hours}h fa)` : '';
     lines.push(`<span class="s-ok">● Cookie sessionKey importati${age}</span>`);
   } else {
-    lines.push('<span class="s-inf">○ Cookie non importati — opzionale per Design/Routine</span>');
+    lines.push('<span class="s-inf">○ Cookie: non importati — opzionale</span>');
   }
 
   el.innerHTML = lines.join('<br>');
 
+  // Poll interval
   document.getElementById('poll-interval').value = String(cfg.poll_interval || 60);
 
+  // Theme buttons
   document.querySelectorAll('.theme-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'dark')));
 
+  // Server URL
   const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
   setText('server-url', base);
+
+  // Setup availability
+  refreshSetupStatus();
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SETUP RPi
+   ════════════════════════════════════════════════════════════════════════ */
+async function refreshSetupStatus() {
+  try {
+    const data = await fetch('/api/setup-rpi/log').then(r => r.json());
+    const tag  = document.getElementById('setup-avail-tag');
+    const btn  = document.getElementById('setup-btn');
+    if (data.available) {
+      tag.textContent  = '● disponibile';
+      tag.style.color  = 'var(--green)';
+      btn.style.display = '';
+    } else {
+      tag.textContent  = '○ solo via SSH';
+      tag.style.color  = 'var(--muted2)';
+      btn.style.display = 'none';
+    }
+    if (data.running) {
+      btn.disabled    = true;
+      btn.textContent = 'Setup in corso…';
+      updateSetupLog(data);
+      if (!setupPollTimer) {
+        setupPollTimer = setInterval(pollSetupLog, 2000);
+      }
+    }
+  } catch(e) { /* offline */ }
+}
+
+async function runSetupRpi() {
+  const btn    = document.getElementById('setup-btn');
+  const logEl  = document.getElementById('setup-log');
+  const hint   = document.getElementById('setup-login-hint');
+  btn.disabled    = true;
+  btn.textContent = 'Avvio setup…';
+  logEl.style.display = '';
+  logEl.textContent   = 'Avvio in corso…\n';
+  hint.style.display  = 'none';
+
+  try {
+    const res  = await fetch('/api/setup-rpi', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) {
+      logEl.textContent = '✗ ' + data.reason;
+      btn.disabled = false; btn.textContent = '▶ Esegui Setup';
+      return;
+    }
+    setupPollTimer = setInterval(pollSetupLog, 2000);
+    pollSetupLog();
+  } catch(e) {
+    logEl.textContent = '✗ Errore: ' + e.message;
+    btn.disabled = false; btn.textContent = '▶ Esegui Setup';
+  }
+}
+
+async function pollSetupLog() {
+  try {
+    const data = await fetch('/api/setup-rpi/log').then(r => r.json());
+    updateSetupLog(data);
+    if (!data.running) {
+      clearInterval(setupPollTimer);
+      setupPollTimer = null;
+      const btn = document.getElementById('setup-btn');
+      btn.disabled = false; btn.textContent = '↺ Ri-esegui Setup';
+      // Show login hint if credentials likely missing
+      const hint = document.getElementById('setup-login-hint');
+      if (data.log.includes('Credenziali non trovate')) {
+        hint.style.display = '';
+      }
+      await loadData();
+    }
+  } catch(e) { /* ignore */ }
+}
+
+function updateSetupLog(data) {
+  const logEl = document.getElementById('setup-log');
+  if (!logEl) return;
+  logEl.style.display = '';
+  // Strip ANSI color codes for readability in the web UI
+  logEl.textContent = (data.log || '').replace(/\x1b\[[0-9;]*m/g, '');
+  logEl.scrollTop   = logEl.scrollHeight;
+}
+
+function copySetupCmd() {
+  const cmd = 'curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/claude/rpi-token-monitor/setup-rpi.sh | bash';
+  navigator.clipboard.writeText(cmd).then(() => {
+    const el = document.getElementById('copy-confirm');
+    if (el) { el.style.display = ''; setTimeout(() => el.style.display = 'none', 2500); }
+  }).catch(() => {});
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

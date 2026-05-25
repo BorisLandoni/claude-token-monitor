@@ -2,7 +2,8 @@
 # ============================================================
 #  Claude Token Monitor — Setup automatico per Raspberry Pi
 #  Testato su: Raspberry Pi OS Bookworm (64-bit) / Bullseye
-#  Uso: bash setup-rpi.sh
+#  Uso:  bash setup-rpi.sh
+#        NON_INTERACTIVE=1 bash setup-rpi.sh   (da UI)
 # ============================================================
 set -euo pipefail
 
@@ -10,6 +11,7 @@ REPO_URL="https://github.com/BorisLandoni/claude-token-monitor.git"
 INSTALL_DIR="$HOME/claude-token-monitor"
 SERVICE_NAME="claude-monitor"
 PORT=8080
+NON_INTERACTIVE=${NON_INTERACTIVE:-0}
 
 # ── Colori ───────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -33,8 +35,10 @@ echo "  Questo script installa tutto il necessario:"
 echo "  Node.js, Claude Code, Python, il monitor e il"
 echo "  servizio di avvio automatico."
 echo ""
-echo "  Premi INVIO per continuare o Ctrl+C per annullare."
-read -r
+if [ "$NON_INTERACTIVE" = "0" ]; then
+  echo "  Premi INVIO per continuare o Ctrl+C per annullare."
+  read -r
+fi
 
 # ── 1. Aggiornamento sistema ──────────────────────────────────
 step "Aggiornamento pacchetti di sistema..."
@@ -72,6 +76,9 @@ CRED_FILE="$HOME/.claude/.credentials.json"
 
 if [ -f "$CRED_FILE" ]; then
     ok "Credenziali Claude Code già presenti — login saltato"
+elif [ "$NON_INTERACTIVE" = "1" ]; then
+    warn "Credenziali non trovate."
+    warn "Al termine del setup apri un terminale e digita: claude login"
 else
     echo ""
     echo -e "  ${YELLOW}Devi effettuare il login a Claude Code.${RESET}"
