@@ -233,6 +233,28 @@ async def force_poll():
     return {'ok': False, 'reason': str(limits)}
 
 
+class ImportCookies(BaseModel):
+    text: str
+
+
+@app.post('/api/import-cookies')
+async def import_cookies(body: ImportCookies):
+    """Importa cookie da Chrome (cURL, raw string, JSON Playwright)."""
+    n, msg = client.import_cookies_from_text(body.text)
+    if n == 0:
+        return {'ok': False, 'message': msg}
+    # Subito un poll per popolare l'account
+    try:
+        limits = await client.poll_limits()
+        if not limits or limits.get('_error'):
+            limits = await client.poll_with_playwright()
+        if limits and not limits.get('_error'):
+            process_account_limits(limits)
+    except Exception as e:
+        print(f'[import] poll dopo import: {e}')
+    return {'ok': True, 'message': msg, 'count': n}
+
+
 @app.post('/api/logout')
 def logout():
     from claude_client import COOKIES_FILE, ENDPOINTS_FILE
