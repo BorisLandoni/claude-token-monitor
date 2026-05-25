@@ -6,10 +6,6 @@ rpi-monitor/backend/.venv/
 rpi-monitor/backend/__pycache__/
 rpi-monitor/setup/start-kiosk.sh
 
-# Node
-esp32-token-monitor/server/node_modules/
-esp32-token-monitor/server/data.json
-
 # Python
 __pycache__/
 *.pyc
