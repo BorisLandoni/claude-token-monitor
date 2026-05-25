@@ -25,7 +25,7 @@ if %errorlevel% neq 0 (
 
 REM Installa browser Playwright (solo la prima volta, ~150MB)
 echo  [2/3] Installazione browser Playwright (solo prima volta)...
-playwright install chromium
+python -m playwright install chromium
 if %errorlevel% neq 0 (
     echo  ERRORE: playwright install fallito.
     pause & exit /b 1
