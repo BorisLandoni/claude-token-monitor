@@ -86,27 +86,29 @@ else
 fi
 
 # ── 4. Login Claude Code ──────────────────────────────────────
-step "Login a Claude Code..."
+# NOTA: non lanciamo "claude login" dallo script perché apre la UI
+# interattiva e blocca l'esecuzione. L'utente deve farlo prima o dopo.
+step "Verifica credenziali Claude Code..."
 CRED_FILE="$HOME/.claude/.credentials.json"
 
 if [ -f "$CRED_FILE" ]; then
-    ok "Credenziali Claude Code già presenti — login saltato"
-elif [ "$NON_INTERACTIVE" = "1" ]; then
-    warn "Credenziali non trovate."
-    warn "Opzione A (64-bit): apri un terminale e digita: claude login"
-    warn "Opzione B (32-bit): copia ~/.claude/.credentials.json dal PC via scp"
+    ok "Credenziali Claude Code trovate — OK"
 else
+    warn "Credenziali non trovate in $CRED_FILE"
     echo ""
-    echo -e "  ${YELLOW}Devi effettuare il login a Claude Code.${RESET}"
-    echo "  Si aprirà il browser: accedi con il tuo account Anthropic."
-    echo "  Una volta completato il login, torna qui."
+    echo -e "  ${YELLOW}${BOLD}AZIONE RICHIESTA:${RESET}"
+    echo -e "  Apri un ${BOLD}secondo terminale${RESET} e digita:"
+    echo -e "    ${CYAN}claude login${RESET}"
+    echo "  Accedi con il browser, poi torna qui e premi INVIO per continuare."
     echo ""
-    claude login
-    if [ -f "$CRED_FILE" ]; then
-        ok "Login completato — credenziali salvate"
-    else
-        warn "File credenziali non trovato dopo il login."
-        warn "Il monitor potrebbe non funzionare. Prova: claude login"
+    if [ "$NON_INTERACTIVE" = "0" ]; then
+        read -r -p "  Premi INVIO quando hai completato il login... "
+        if [ -f "$CRED_FILE" ]; then
+            ok "Credenziali trovate — login completato"
+        else
+            warn "Credenziali ancora non trovate — il monitor potrebbe non funzionare."
+            warn "Puoi fare 'claude login' manualmente dopo il setup."
+        fi
     fi
 fi
 
