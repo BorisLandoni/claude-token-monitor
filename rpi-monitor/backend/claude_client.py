@@ -228,6 +228,14 @@ async def _scrape_settings_dom(page) -> Optional[dict]:
         if m:
             result['credits_balance_eur'] = float(m.group(1).replace(',', '.'))
 
+        # ── Daily routines: "N / 5" near "routine giornaliere" ───────────────
+        m = re.search(r'(\d+)\s*/\s*(\d+)[^\n]{0,60}routine', content, re.IGNORECASE)
+        if not m:
+            m = re.search(r'routine[^\n]{0,60}(\d+)\s*/\s*(\d+)', content, re.IGNORECASE)
+        if m:
+            result['routines_used']  = int(m.group(1))
+            result['routines_limit'] = int(m.group(2))
+
         return result if result else None
     except Exception as e:
         print(f'[dom-scrape] {e}')
