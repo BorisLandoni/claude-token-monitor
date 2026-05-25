@@ -115,8 +115,20 @@ body { background: var(--bg); color: var(--text); }
 .slim-fill { height:100%; border-radius:3px; transition: width .6s ease, background .4s ease; }
 .weekly-meta { font-size:11px; color:var(--muted); }
 
+.now-footer-wrap {
+  margin-top:auto;
+}
+.refresh-bar-wrap {
+  height:3px; background:var(--border); border-radius:2px;
+  overflow:hidden; margin-bottom:5px;
+}
+#refresh-bar {
+  height:100%; width:0%; border-radius:2px;
+  background:var(--cyan); opacity:.55;
+  transition:width 1s linear;
+}
 .now-footer {
-  margin-top:auto; padding-top:8px; border-top:1px solid var(--border);
+  padding-top:5px; border-top:1px solid var(--border);
   display:flex; justify-content:space-between; align-items:center;
   font-size:11px; color:var(--muted);
 }
@@ -442,10 +454,15 @@ body { background: var(--bg); color: var(--text); }
         <span class="spin-icon">⟳</span> AGGIORNA
       </button>
 
-      <!-- Footer -->
-      <div class="now-footer">
-        <span id="session-status">—</span>
-        <span id="last-updated">—</span>
+      <!-- Footer con barra progresso prossimo aggiornamento -->
+      <div class="now-footer-wrap">
+        <div class="refresh-bar-wrap">
+          <div id="refresh-bar"></div>
+        </div>
+        <div class="now-footer">
+          <span id="session-status">—</span>
+          <span id="last-updated">—</span>
+        </div>
       </div>
     </div>
   </div>
@@ -677,6 +694,8 @@ let sessionHistory = [];   // [{ts, pct}] — campioni session % per sparkline
 let alertShownAt   = 0;
 let alertDismissTs = 0;
 let setupPollTimer = null;
+let lastLoadTs     = Date.now();
+let pollIntervalMs = 60_000;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -692,6 +711,7 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
       { weekday:'short', day:'numeric', month:'short' });
     renderCountdown(now);
     renderTimeline();
+    renderRefreshBar();
   }
   tick();
   setInterval(tick, 1000);
@@ -739,6 +759,16 @@ function renderTimeline() {
     { hour:'2-digit', minute:'2-digit' });
   if (start) start.textContent = fmt(startTs);
   if (end)   end.textContent   = fmt(sessionResetTs) + ' ↺';
+}
+
+function renderRefreshBar() {
+  const bar = document.getElementById('refresh-bar');
+  if (!bar) return;
+  const elapsed = Date.now() - lastLoadTs;
+  const pct     = Math.min(100, (elapsed / pollIntervalMs) * 100);
+  bar.style.width = pct + '%';
+  // Colore: ciano → ambra quando si avvicina
+  bar.style.background = pct > 85 ? 'var(--amber)' : 'var(--cyan)';
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -872,9 +902,12 @@ async function loadData() {
     hourlyData     = Array.isArray(hourly)  ? hourly  : [];
     sessionHistory = Array.isArray(history) ? history : [];
     sessionResetTs = account.session_resets_at_ts || account.reset_at_ts || null;
+    pollIntervalMs = (settings.poll_interval || 60) * 1000;
+    lastLoadTs     = Date.now();
     applyTheme(settings.theme || 'dark');
     render();
     drawSparkline();
+    renderRefreshBar();
     scheduleRefresh(settings.poll_interval || 60);
   } catch (e) {
     console.error('loadData:', e);
