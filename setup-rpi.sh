@@ -66,7 +66,12 @@ step "Installazione Claude Code (claude CLI)..."
 if command -v claude &>/dev/null; then
     ok "Claude Code già installato: $(claude --version 2>/dev/null || echo 'ok')"
 else
-    sudo env "PATH=$PATH" npm install -g @anthropic-ai/claude-code --quiet
+    # Assicura che npm sia disponibile (NodeSource a volte non lo include)
+    if ! command -v npm &>/dev/null; then
+        sudo apt-get install -y -qq npm
+    fi
+    NPM_BIN=$(command -v npm)
+    sudo "$NPM_BIN" install -g @anthropic-ai/claude-code --quiet
     ok "Claude Code installato"
 fi
 
