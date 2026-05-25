@@ -11,24 +11,24 @@ Claude.ai (web / desktop / mobile / VS Code)
        │
        │  uso normale — zero token consumati
        ▼
-  claude.ai/settings › Utilizzo
-       │  ◄─── polling automatico ogni 60 s
-       │        Strategia a tre livelli:
-       │        1. httpx con cookie salvati  (~1 s)
-       │        2. Playwright headless       (~20-40 s, se httpx fallisce)
-       │        3. DOM scraping              (fallback testo pagina)
+  Anthropic OAuth API  +  claude.ai DOM scrape (opzionale)
+       │  polling automatico ogni 60 s
+       │
+       │  Strategia a due livelli:
+       │  1. OAuth token Claude Code  (~1 s)   ← PRIMARIO
+       │  2. Cookie sessionKey + DOM scrape    ← opzionale, per crediti/design
        ▼
-┌──────────────────────────────────┐
-│  Raspberry Pi 4  ·  FastAPI :8080 │
-│  rpi-monitor/backend/server.py   │
-└────────────────┬─────────────────┘
-                 │
++---------------------------------+
+|  Raspberry Pi 4  · FastAPI :8080 |
+|  rpi-monitor/backend/server.py  |
++---------------------------------+
+                 |
                  ▼
-      Chromium kiosk 800×480
+      Chromium kiosk 800x480
       Dashboard touch — 5 pagine
 ```
 
-Il monitor accede a `claude.ai/settings` usando i **cookie di sessione del tuo browser** (salvati dopo un login una-tantum con Playwright). Non vengono usate API Anthropic a pagamento: il polling replica esattamente le stesse chiamate che claude.ai fa già internamente.
+Il monitor usa l'**OAuth token di Claude Code** (salvato in `~/.claude/.credentials.json`) per chiamare l'endpoint `https://api.anthropic.com/api/oauth/usage`. Nessun login, nessun Playwright per l'auth, nessun Cloudflare. Il token si rinnova automaticamente finché Claude Code è installato.
 
 ---
 
@@ -40,50 +40,64 @@ Il monitor accede a `claude.ai/settings` usando i **cookie di sessione del tuo b
 | Display touch HDMI | [5" 800×480 capacitivo (Futuranet)](https://futuranet.it/prodotto/display-touch-screen-5-800x480-pixel/) | €59 |
 | MicroSD | 16 GB Classe 10 (Samsung/SanDisk Endurance) | ~€8 |
 | Alimentatore | USB-C 27W / 5.1V 3A ufficiale RPi | ~€12 |
-| Cavo micro-HDMI → HDMI | incluso con il display o separato | — |
+| Cavo micro-HDMI -> HDMI | incluso con il display o separato | — |
 
-> **RPi 4 2 GB** è il target principale: login Playwright in ~25 s, kiosk 800×480 fluido.  
-> **RPi 3B+** funziona ma il login richiede ~50 s e la RAM è più stretta.
+> **RPi 4 2 GB** è il target principale: dashboard 800×480 fluida.
+> **RPi 3B+** funziona ma la RAM è più stretta.
 
 ---
 
-## Installazione rapida
+## Installazione rapida (Raspberry Pi)
 
 ```bash
-# 1. Clona il repo sul Raspberry Pi
-git clone https://github.com/BorisLandoni/claude-token-monitor.git
-cd claude-token-monitor
-
-# 2. Esegui l'installer (installa dipendenze, crea il servizio systemd, configura il kiosk)
-bash rpi-monitor/setup/install.sh
-
-# 3. Apri la dashboard dal PC o telefono (stessa rete WiFi)
-#    http://raspberrypi.local:8080
-#    Vai in IMPOSTAZIONI → inserisci email e password Claude.ai → ACCEDI
-
-# 4. Riavvia il Raspberry Pi — il kiosk si avvia automaticamente
-sudo reboot
+# Scarica ed esegui lo script di setup automatico
+curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/main/setup-rpi.sh | bash
 ```
 
+Lo script fa tutto da solo:
+1. Installa Node.js, Python, dipendenze di sistema
+2. Installa **Claude Code** (`claude` CLI)
+3. Avvia **`claude login`** — accedi una volta col browser
+4. Clona il repository
+5. Crea l'ambiente Python + installa Playwright
+6. Crea e avvia il servizio **systemd** (autostart al boot)
+7. Configura **Chromium in modalità kiosk** (si apre sul display all'avvio)
+
+Dopo il setup:
+- Dashboard locale: `http://localhost:8080`
+- Da PC/telefono sulla stessa rete: `http://<IP-del-rpi>:8080`
+
 Per la guida completa passo-passo (flash SD, WiFi, SSH, risoluzione problemi) → [GUIDA-RASPBERRY.md](GUIDA-RASPBERRY.md)
+
+---
+
+## Installazione su Windows (simulazione/sviluppo)
+
+```
+start-windows.bat
+```
+
+Il bat installa le dipendenze Python, avvia il backend e apre il browser su `http://localhost:8080`.
+
+**Prerequisito:** [Claude Code](https://claude.ai/download) installato e loggato (`claude login` fatto almeno una volta).
 
 ---
 
 ## Struttura del repository
 
 ```
-rpi-monitor/
-├── backend/
-│   ├── server.py          FastAPI (porta 8080) + background poll loop
-│   ├── claude_client.py   Login Playwright + polling httpx + DOM scraping
-│   ├── store.py           Store in RAM + persistenza data.json
-│   └── requirements.txt
-├── frontend/
-│   └── index.html         SPA 800×480 touch (5 pagine, Chart.js, arc gauge)
-└── setup/
-    ├── install.sh         Installer automatico per Raspberry Pi OS
-    ├── claude-monitor.service   Definizione servizio systemd
-    └── claude-kiosk.desktop     Autostart LXDE kiosk
+claude-token-monitor/
+├── setup-rpi.sh              Script di setup automatico per Raspberry Pi
+├── start-windows.bat         Avvio rapido su Windows
+├── rpi-monitor/
+│   ├── backend/
+│   │   ├── server.py         FastAPI (porta 8080) + background poll loop
+│   │   ├── claude_client.py  OAuth token + cookie import + DOM scraping
+│   │   ├── store.py          Store in RAM + persistenza data.json
+│   │   └── requirements.txt
+│   └── frontend/
+│       └── index.html        SPA 800x480 touch (5 pagine, gauge, sparkline)
+└── GUIDA-RASPBERRY.md        Guida completa per RPi
 ```
 
 ---
@@ -92,11 +106,11 @@ rpi-monitor/
 
 | Pagina | Contenuto |
 |---|---|
-| **ADESSO** | Arc gauge sessione corrente (%), countdown reset, limiti settimanali |
-| **ORA** | Grafico 24 h a barre — input (ciano) / output (verde) |
+| **ADESSO** | Arc gauge sessione corrente (%), countdown reset, limiti settimanali, crediti spesi |
+| **ORA** | Sparkline costo ultime 24 h, token in/out per fascia oraria |
 | **GIORNO** | Grafico ultimi 7 giorni |
 | **SETTIMANA** | Grafico ultime 4 settimane |
-| **IMPOSTAZIONI** | Login Claude.ai, tema grafico, intervallo aggiornamento |
+| **IMPOST.** | Stato auth OAuth/cookie, import cookie opzionale, tema, intervallo polling |
 
 ### Temi disponibili
 
@@ -108,12 +122,31 @@ rpi-monitor/
 
 ---
 
-## Dati monitorati
+## Autenticazione
 
-Il backend legge da `claude.ai/settings › Utilizzo`:
+### Primaria — OAuth Claude Code (automatica)
 
-- **Sessione corrente**: % usato, % rimanente, countdown reset (es. "Si ripristina tra 3 h 38 min")
-- **Settimanale**: % usato, giorno/ora reset (es. "sab 17:59")
+Il monitor legge `~/.claude/.credentials.json` (creato da Claude Code dopo il login) e chiama:
+
+```
+GET https://api.anthropic.com/api/oauth/usage
+Authorization: Bearer <token>
+anthropic-beta: oauth-2025-04-20
+```
+
+Ritorna: % sessione (5h), % settimanale (7d), timestamp reset, crediti spesi.
+
+Il token viene rinnovato automaticamente da Claude Code — nessun intervento richiesto.
+
+### Opzionale — Cookie sessionKey (per dati extra)
+
+Se vuoi vedere anche **Claude Design %** e **routine giornaliere**, puoi importare i cookie di sessione da Chrome:
+
+1. Apri `IMPOST.` nella dashboard
+2. Espandi "Importa cookie da Chrome"
+3. Incolla il blocco cURL copiato da DevTools → Network → `copy as cURL`
+
+I cookie vengono usati solo per il DOM scrape di `claude.ai/settings/utilizzo`.
 
 ---
 
@@ -121,23 +154,16 @@ Il backend legge da `claude.ai/settings › Utilizzo`:
 
 Il backend espone un'API REST sulla porta 8080.
 
-### Account e utilizzo
-
 | Metodo | Endpoint | Descrizione |
 |---|---|---|
-| `GET` | `/api/account` | Percentuali sessione/settimanale, reset timer, piano |
-| `GET` | `/api/session` | Stato cookie, email, età del cookie in ore |
-| `POST` | `/api/login` | Login Playwright — body: `{"email":"…","password":"…"}` |
-| `POST` | `/api/logout` | Cancella cookie e dati account |
+| `GET` | `/api/account` | Percentuali sessione/settimanale, reset timer, crediti |
+| `GET` | `/api/session` | Stato OAuth, stato cookie, email |
 | `POST` | `/api/poll` | Forza un poll immediato |
-
-### Impostazioni
-
-| Metodo | Endpoint | Descrizione |
-|---|---|---|
-| `GET` | `/api/settings` | Legge `poll_interval`, `theme`, `email` |
-| `PUT` | `/api/settings` | Aggiorna — body: `{"poll_interval":60,"theme":"dark"}` |
-| `GET` | `/health` | Health check — risponde `{"ok":true}` |
+| `POST` | `/api/import-cookies` | Importa cookie da testo cURL |
+| `POST` | `/api/logout` | Cancella cookie e dati account |
+| `GET` | `/api/settings` | Legge `poll_interval`, `theme` |
+| `PUT` | `/api/settings` | Aggiorna impostazioni |
+| `GET` | `/health` | Health check |
 
 #### Esempi curl
 
@@ -169,25 +195,20 @@ sudo journalctl -u claude-monitor -n 100  # ultimi 100 log
 
 ```bash
 cd ~/claude-token-monitor
-sudo systemctl stop claude-monitor
 git pull
-source rpi-monitor/backend/.venv/bin/activate
-pip install -r rpi-monitor/backend/requirements.txt --upgrade
-deactivate
-sudo systemctl start claude-monitor
+sudo systemctl restart claude-monitor
 ```
 
 ---
 
 ## Sicurezza e privacy
 
-- **Nessuna API Anthropic a pagamento**: il polling usa i cookie di sessione, come fa il browser
-- **Credenziali non salvate**: email usata solo per il login, password mai memorizzata su disco
-- **Cookie salvati localmente** in `rpi-monitor/backend/cookies.json` (solo sul Raspberry Pi)
+- **Nessuna API Anthropic a pagamento**: l'endpoint OAuth è gratuito e non consuma token
+- **Nessuna password mai memorizzata**: l'auth usa il token OAuth di Claude Code
+- **Token locale**: `~/.claude/.credentials.json` rimane solo sul dispositivo
+- **Cookie opzionali**: salvati in `rpi-monitor/backend/cookies.json` solo se importati
 - **Nessun dato inviato a server esterni**: tutto rimane sulla rete locale
-- **Accesso dashboard non protetto**: chiunque sulla stessa rete WiFi può vedere i dati — usa in reti domestiche o private
-
-I cookie di sessione Claude.ai durano 7-30 giorni. Quando scadono, la dashboard mostra "Sessione scaduta": vai in IMPOSTAZIONI → Disconnetti → reinserisci le credenziali.
+- **Accesso dashboard non protetto**: usa in reti domestiche o private
 
 ---
 
