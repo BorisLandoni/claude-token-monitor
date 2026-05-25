@@ -56,7 +56,7 @@ step "Installazione Node.js LTS..."
 if command -v node &>/dev/null && node --version | grep -qE '^v(18|20|22)'; then
     ok "Node.js già installato: $(node --version)"
 else
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash - -q
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
     sudo apt-get install -y -qq nodejs
     ok "Node.js installato: $(node --version)"
 fi
