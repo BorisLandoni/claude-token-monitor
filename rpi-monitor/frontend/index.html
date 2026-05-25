@@ -34,33 +34,27 @@ html, body { width: 800px; height: 480px; overflow: hidden;
   --green:  #00E87A; --green-glow:  rgba(0,232,122,.25);
   --amber:  #FFB030; --amber-glow:  rgba(255,176,48,.25);
   --red:    #FF4455; --red-glow:    rgba(255,68,85,.25);
-  --gold:   #FFD060; --gold-glow:   rgba(255,208,96,.25);
   --violet: #A060FF; --violet-glow: rgba(160,96,255,.25);
 }
-
 body { background: var(--bg); color: var(--text); }
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 #header { position:fixed; top:0; left:0; width:800px; height:50px; z-index:200;
-  background: var(--header-bg);
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 18px; }
-#main   { position:fixed; top:50px; left:0; width:800px; height:370px; overflow:hidden; }
-#nav    { position:fixed; bottom:0; left:0; width:800px; height:60px; z-index:200;
-  background: var(--header-bg);
-  border-top: 1px solid var(--border);
-  display: flex; }
+  background: var(--header-bg); border-bottom: 1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between; padding:0 18px; }
+#main { position:fixed; top:50px; left:0; width:800px; height:370px; overflow:hidden; }
+#nav  { position:fixed; bottom:0; left:0; width:800px; height:60px; z-index:200;
+  background: var(--header-bg); border-top: 1px solid var(--border); display:flex; }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
 .h-left  { display:flex; align-items:center; gap:10px; }
-.h-right { display:flex; align-items:center; gap:18px; }
+.h-right { display:flex; align-items:center; gap:14px; }
 .pulse   { width:8px; height:8px; border-radius:50%; background:var(--cyan);
-           box-shadow: 0 0 8px var(--cyan);
-           animation: pulse 2.4s ease-in-out infinite; }
+           box-shadow:0 0 8px var(--cyan);
+           animation:pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.85)} }
 .app-title { font-size:14px; font-weight:700; letter-spacing:2.5px; color:var(--cyan); }
-#date { font-size:13px; color:var(--muted); }
+#date  { font-size:13px; color:var(--muted); }
 #clock { font-size:19px; font-weight:700; font-variant-numeric:tabular-nums;
          color:var(--text); letter-spacing:1px; }
 
@@ -73,89 +67,90 @@ body { background: var(--bg); color: var(--text); }
    ═════════════════════════════════════════════════════════════════════════ */
 #page-now { flex-direction:row; }
 
-.now-gauge-col {
-  width:340px; min-width:340px;
+/* ── Left: gauge + timeline + weekly ──────────────────────────────────────── */
+.now-left {
+  width:330px; min-width:330px;
   display:flex; flex-direction:column; align-items:center;
-  padding: 10px 14px 8px;
-  border-right: 1px solid var(--border);
-  overflow: hidden;
+  padding:8px 12px 6px;
+  border-right:1px solid var(--border);
+  overflow:hidden; gap:0;
 }
 .gauge-section-label {
   font-size:10px; font-weight:700; letter-spacing:2.5px; color:var(--muted);
-  margin-bottom:4px; align-self:flex-start;
+  margin-bottom:3px; align-self:flex-start;
 }
-.gauge-wrap { width:210px; height:168px; position:relative; flex-shrink:0; }
+.gauge-wrap { width:200px; height:155px; flex-shrink:0; }
 .gauge-wrap svg { width:100%; height:100%; overflow:visible; }
-
-.g-num   { font-size:40px; font-weight:800; font-variant-numeric:tabular-nums; }
-.g-label { font-size:12px; font-weight:500; fill:var(--muted); }
+.g-num   { font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; }
+.g-label { font-size:11px; font-weight:500; fill:var(--muted); }
 .g-used  { font-size:11px; fill:var(--muted); }
 
-.gauge-countdown {
-  margin-top:4px; font-size:13px; font-weight:600;
-  color:var(--amber); letter-spacing:.5px; text-align:center;
+#countdown {
+  font-size:12px; font-weight:600; color:var(--amber);
+  letter-spacing:.3px; text-align:center; margin-top:2px;
+  line-height:1.4;
 }
-.gauge-countdown.ok  { color:var(--green); }
-.gauge-countdown.low { color:var(--red); }
+#countdown.ok  { color:var(--green); }
+#countdown.low { color:var(--red); }
 
-.now-stats-col {
-  flex:1; display:flex; flex-direction:column;
-  padding:14px 16px; gap:10px; overflow:hidden;
-}
-
-.weekly-box {
-  background: var(--surface); border:1px solid var(--border);
-  border-radius:12px; padding:12px 14px;
-}
-.box-title { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:8px; }
-.weekly-pct-row { display:flex; align-items:baseline; gap:6px; margin-bottom:6px; }
-.weekly-big   { font-size:28px; font-weight:800; color:var(--green); font-variant-numeric:tabular-nums; }
-.weekly-unit  { font-size:12px; color:var(--muted); }
-.slim-bar { height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin-bottom:5px; }
-.slim-fill { height:100%; border-radius:3px; transition: width .6s ease, background .4s ease; }
-.weekly-meta { font-size:11px; color:var(--muted); }
-
-.now-footer-wrap {
-  margin-top:auto;
-}
-.refresh-bar-wrap {
-  height:3px; background:var(--border); border-radius:2px;
-  overflow:hidden; margin-bottom:5px;
-}
-#refresh-bar {
-  height:100%; width:0%; border-radius:2px;
-  background:var(--cyan); opacity:.55;
-  transition:width 1s linear;
-}
-.now-footer {
-  padding-top:5px; border-top:1px solid var(--border);
-  display:flex; justify-content:space-between; align-items:center;
-  font-size:11px; color:var(--muted);
-}
-#session-status { font-weight:700; font-size:12px; }
-
-/* ── Session Timeline ────────────────────────────────────────────────────── */
+/* Timeline */
 .timeline-section { width:100%; margin-top:6px; }
-.tl-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:4px; }
-.tl-bar   { height:12px; background:var(--surface2); border:1px solid var(--border);
-            border-radius:6px; overflow:hidden; }
-.tl-fill  { height:100%; border-radius:6px; transition:width .9s ease, background .4s ease; min-width:3px; }
-.tl-times { display:flex; justify-content:space-between; margin-top:3px; font-size:10px; color:var(--muted2); }
+.tl-label { font-size:10px; font-weight:700; letter-spacing:2px;
+            color:var(--muted); margin-bottom:3px; }
+.tl-bar   { height:10px; background:var(--surface2); border:1px solid var(--border);
+            border-radius:5px; overflow:hidden; }
+.tl-fill  { height:100%; border-radius:5px;
+            transition:width .9s ease, background .4s ease; min-width:3px; }
+.tl-times { display:flex; justify-content:space-between;
+            margin-top:3px; font-size:10px; color:var(--muted2); }
 
-/* ── Sparkline ───────────────────────────────────────────────────────────── */
-.sparkline-section { width:100%; margin-top:6px; }
-.sp-label { font-size:10px; font-weight:700; letter-spacing:2px; color:var(--muted); margin-bottom:4px; }
-#sparkline { display:block; width:100%; height:36px; }
+/* Weekly compact (left col) */
+.weekly-compact {
+  width:100%; margin-top:7px;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:9px; padding:7px 10px;
+}
+.box-title { font-size:10px; font-weight:700; letter-spacing:2px;
+             color:var(--muted); margin-bottom:5px; }
+.weekly-pct-row { display:flex; align-items:baseline; gap:5px; margin-bottom:4px; }
+.weekly-big  { font-size:24px; font-weight:800; color:var(--green);
+               font-variant-numeric:tabular-nums; }
+.weekly-unit { font-size:11px; color:var(--muted); }
+.slim-bar  { height:5px; background:var(--border); border-radius:3px;
+             overflow:hidden; margin-bottom:4px; }
+.slim-fill { height:100%; border-radius:3px;
+             transition:width .6s ease, background .4s ease; }
+.weekly-meta { font-size:10px; color:var(--muted); }
 
-/* ── Bottone Aggiorna (touch-friendly) ───────────────────────────────────── */
+/* ── Right: sparkline big + extras + button + footer ──────────────────────── */
+.now-right {
+  flex:1; display:flex; flex-direction:column;
+  padding:10px 14px; gap:8px; overflow-y:auto;
+}
+
+.sparkline-big-section { flex-shrink:0; }
+.sp-label { font-size:10px; font-weight:700; letter-spacing:2px;
+            color:var(--muted); margin-bottom:4px; }
+#sparkline {
+  display:block; width:100%; height:140px;
+  border-radius:6px;
+}
+
+/* Optional boxes (design / routine) */
+.extra-box {
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:9px; padding:8px 12px; flex-shrink:0;
+}
+
+/* Aggiorna button */
 #now-refresh-btn {
-  width:100%; padding:14px 0; font-size:16px; font-weight:700;
-  letter-spacing:1.5px; border-radius:10px;
+  width:100%; padding:12px 0; font-size:15px; font-weight:700;
+  letter-spacing:1px; border-radius:10px; flex-shrink:0;
   background:var(--surface); border:2px solid var(--border2);
   color:var(--cyan); cursor:pointer;
-  display:flex; align-items:center; justify-content:center; gap:10px;
+  display:flex; align-items:center; justify-content:center; gap:8px;
   transition:background .15s, border-color .15s, filter .1s;
-  -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color:transparent;
 }
 #now-refresh-btn:hover  { background:var(--surface2); border-color:var(--cyan); }
 #now-refresh-btn:active { filter:brightness(.8); }
@@ -163,23 +158,27 @@ body { background: var(--bg); color: var(--text); }
 .spin-icon { display:inline-block; }
 #now-refresh-btn.loading .spin-icon { animation:spin .6s linear infinite; }
 
+/* Refresh progress bar + footer */
+.now-footer-wrap { margin-top:auto; flex-shrink:0; }
+.refresh-bar-wrap { height:3px; background:var(--border); border-radius:2px; overflow:hidden; margin-bottom:4px; }
+#refresh-bar { height:100%; width:0%; border-radius:2px; background:var(--cyan); opacity:.55; transition:width 1s linear; }
+.now-footer {
+  padding-top:4px; border-top:1px solid var(--border);
+  display:flex; justify-content:space-between; align-items:center;
+  font-size:11px; color:var(--muted);
+}
+#session-status { font-weight:700; font-size:12px; }
+
 /* ══════════════════════════════════════════════════════════════════════════
    CREDITI PAGE
    ═════════════════════════════════════════════════════════════════════════ */
 #page-crediti { flex-direction:row; }
-
-.crediti-col {
-  flex:1; display:flex; flex-direction:column;
-  padding:20px 22px; gap:14px;
-}
+.crediti-col { flex:1; display:flex; flex-direction:column; padding:20px 22px; gap:14px; }
 .crediti-col + .crediti-col { border-left:1px solid var(--border); }
-
 .crediti-amount-row { display:flex; align-items:baseline; gap:6px; }
 .crediti-big { font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--amber); }
-.crediti-big.green { color:var(--green); }
-.crediti-limit { font-size:16px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.crediti-limit { font-size:16px; color:var(--muted); }
 .crediti-pct { font-size:11px; color:var(--muted); margin-top:2px; }
-
 .crediti-balance { font-size:38px; font-weight:800; font-variant-numeric:tabular-nums; color:var(--green); }
 .crediti-reset-label { font-size:22px; font-weight:700; color:var(--cyan); }
 .crediti-no-data { font-size:13px; color:var(--muted); line-height:1.6; }
@@ -187,33 +186,30 @@ body { background: var(--bg); color: var(--text); }
 /* ══════════════════════════════════════════════════════════════════════════
    SETTINGS PAGE
    ═════════════════════════════════════════════════════════════════════════ */
-#page-settings { flex-direction:row; gap:0; padding:0; }
-
+#page-settings { flex-direction:row; }
 .settings-col {
   flex:1; padding:12px; display:flex; flex-direction:column; gap:8px;
   overflow-y:auto;
 }
 .settings-col + .settings-col { border-left:1px solid var(--border); }
-
 .settings-title { font-size:10px; font-weight:700; letter-spacing:2.5px; color:var(--muted); }
 
 #login-status {
   background:var(--surface); border:1px solid var(--border);
   border-radius:8px; padding:9px 12px; font-size:12px; line-height:1.6;
 }
-.s-ok  { color:var(--green);  }
-.s-err { color:var(--red);    }
-.s-inf { color:var(--amber);  }
+.s-ok  { color:var(--green); }
+.s-err { color:var(--red);   }
+.s-inf { color:var(--amber); }
 
 .field { display:flex; flex-direction:column; gap:4px; }
 .field label { font-size:11px; color:var(--muted); }
-.field input, .field select {
+.field select {
   background:var(--surface); border:1px solid var(--border);
   color:var(--text); border-radius:8px; padding:10px 12px;
   font-size:14px; outline:none; width:100%;
-  transition:border-color .2s;
 }
-.field input:focus, .field select:focus { border-color:var(--cyan); }
+.field select:focus { border-color:var(--cyan); }
 .field select option { background:var(--surface); }
 
 .btn-primary {
@@ -238,6 +234,14 @@ body { background: var(--bg); color: var(--text); }
   cursor:pointer; width:100%; transition:all .2s;
 }
 .btn-danger:hover { border-color:var(--red); color:var(--red); }
+
+.btn-info {
+  background:var(--surface); border:1px solid var(--border2);
+  color:var(--cyan); border-radius:8px; padding:9px; font-size:13px;
+  font-weight:600; cursor:pointer; width:100%; transition:all .2s;
+  display:flex; align-items:center; justify-content:center; gap:6px;
+}
+.btn-info:hover { border-color:var(--cyan); background:var(--surface2); }
 
 .theme-row { display:flex; gap:8px; }
 .theme-btn {
@@ -267,8 +271,6 @@ body { background: var(--bg); color: var(--text); }
   background:var(--surface); border:1px solid var(--border);
   border-radius:8px; font-size:11px; color:var(--muted); line-height:1.6;
 }
-
-/* Setup log terminal */
 #setup-log {
   background:var(--bg); border:1px solid var(--border2);
   border-radius:6px; padding:8px;
@@ -277,7 +279,7 @@ body { background: var(--bg); color: var(--text); }
   margin-top:8px; display:none;
 }
 
-/* ── Bottom nav ──────────────────────────────────────────────────────────── */
+/* ── Nav ──────────────────────────────────────────────────────────────────── */
 .nav-tab {
   flex:1; display:flex; flex-direction:column; align-items:center;
   justify-content:center; gap:3px; background:none; border:none;
@@ -296,14 +298,14 @@ body { background: var(--bg); color: var(--text); }
   background:rgba(255,68,85,.06); border:3px solid var(--red);
   display:none; align-items:center; justify-content:center;
   flex-direction:column; gap:12px; cursor:pointer;
-  animation:alert-pulse 1.0s ease-in-out infinite;
+  animation:alert-pulse 1s ease-in-out infinite;
 }
 #alert-overlay.show { display:flex; }
 @keyframes alert-pulse {
-  0%,100% { box-shadow:inset 0 0 50px rgba(255,68,85,.12); }
-  50%      { box-shadow:inset 0 0 110px rgba(255,68,85,.38); }
+  0%,100%{ box-shadow:inset 0 0 50px rgba(255,68,85,.12); }
+  50%    { box-shadow:inset 0 0 110px rgba(255,68,85,.38); }
 }
-.alert-icon  { font-size:52px; line-height:1; color:var(--red); }
+.alert-icon  { font-size:52px; color:var(--red); }
 .alert-title { font-size:24px; font-weight:800; color:var(--red); letter-spacing:1.5px; }
 .alert-body  { font-size:13px; color:var(--muted); text-align:center; }
 
@@ -317,10 +319,58 @@ body { background: var(--bg); color: var(--text); }
 .spinner {
   width:44px; height:44px; border:4px solid var(--border);
   border-top-color:var(--cyan); border-radius:50%;
-  animation: spin .7s linear infinite;
+  animation:spin .7s linear infinite;
 }
 @keyframes spin { to{transform:rotate(360deg)} }
 .overlay-msg { font-size:14px; color:var(--muted); text-align:center; max-width:300px; }
+
+/* ── Info Modal ──────────────────────────────────────────────────────────── */
+#info-modal {
+  position:fixed; inset:0; z-index:2000;
+  background:rgba(5,13,22,.82); backdrop-filter:blur(6px);
+  display:none; align-items:center; justify-content:center;
+}
+#info-modal.show { display:flex; }
+.info-modal-box {
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:16px; padding:28px 32px; width:360px;
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  box-shadow:0 0 60px rgba(0,200,255,.12);
+}
+.info-modal-logo {
+  font-size:32px; letter-spacing:3px; font-weight:800; color:var(--cyan);
+}
+.info-modal-sub {
+  font-size:12px; letter-spacing:2px; color:var(--muted); margin-top:-10px;
+}
+.info-modal-divider {
+  width:100%; height:1px; background:var(--border);
+}
+.info-modal-dev {
+  text-align:center; line-height:2;
+}
+.info-modal-dev-label { font-size:11px; color:var(--muted); letter-spacing:1px; }
+.info-modal-dev-name {
+  display:block; font-size:20px; font-weight:700; color:var(--text);
+  margin:2px 0;
+}
+.info-modal-dev-link {
+  display:inline-flex; align-items:center; gap:6px;
+  color:var(--cyan); text-decoration:none; font-size:13px; font-weight:600;
+  border:1px solid var(--border2); border-radius:20px;
+  padding:5px 14px; margin-top:4px;
+  transition:background .2s, border-color .2s;
+}
+.info-modal-dev-link:hover { background:var(--surface2); border-color:var(--cyan); }
+.info-modal-ai {
+  font-size:11px; color:var(--muted2); text-align:center;
+}
+.info-modal-close {
+  width:100%; padding:11px; border-radius:8px; border:none;
+  background:var(--cyan); color:#000; font-weight:700; font-size:14px;
+  cursor:pointer; transition:filter .15s;
+}
+.info-modal-close:hover { filter:brightness(1.1); }
 </style>
 </head>
 <body>
@@ -340,11 +390,11 @@ body { background: var(--bg); color: var(--text); }
 <!-- ── Main ───────────────────────────────────────────────────────────────── -->
 <main id="main">
 
-  <!-- ─── NOW ─────────────────────────────────────────────────────────────── -->
+  <!-- ─── ADESSO ───────────────────────────────────────────────────────────── -->
   <div id="page-now" class="page">
 
-    <!-- Left: arc gauge + timeline + sparkline -->
-    <div class="now-gauge-col">
+    <!-- ── LEFT: gauge + timeline + weekly ──────────────────────────────── -->
+    <div class="now-left">
       <div class="gauge-section-label">SESSIONE CORRENTE</div>
 
       <div class="gauge-wrap">
@@ -356,75 +406,70 @@ body { background: var(--bg); color: var(--text); }
             </filter>
           </defs>
           <circle id="gauge-bg-track"
-            cx="110" cy="105" r="80"
-            fill="none" stroke="var(--surface2)" stroke-width="16"
-            stroke-linecap="round"
-            stroke-dasharray="376.99 125.66"
-            transform="rotate(135, 110, 105)"/>
+            cx="110" cy="105" r="80" fill="none"
+            stroke="var(--surface2)" stroke-width="16" stroke-linecap="round"
+            stroke-dasharray="376.99 125.66" transform="rotate(135,110,105)"/>
           <circle id="gauge-glow"
-            cx="110" cy="105" r="80"
-            fill="none" stroke="#00E87A" stroke-width="26" opacity=".18"
-            stroke-linecap="round"
+            cx="110" cy="105" r="80" fill="none"
+            stroke="#00E87A" stroke-width="26" opacity=".18" stroke-linecap="round"
             stroke-dasharray="0 502.65"
-            style="transition: stroke-dasharray .8s ease-out, stroke .4s ease"
-            transform="rotate(135, 110, 105)"/>
+            style="transition:stroke-dasharray .8s ease-out,stroke .4s ease"
+            transform="rotate(135,110,105)"/>
           <circle id="gauge-arc"
-            cx="110" cy="105" r="80"
-            fill="none" stroke="#00E87A" stroke-width="16"
-            stroke-linecap="round"
+            cx="110" cy="105" r="80" fill="none"
+            stroke="#00E87A" stroke-width="16" stroke-linecap="round"
             stroke-dasharray="0 502.65"
-            style="transition: stroke-dasharray .8s ease-out, stroke .4s ease;
+            style="transition:stroke-dasharray .8s ease-out,stroke .4s ease;
                    filter:url(#glow-filter)"
-            transform="rotate(135, 110, 105)"/>
-          <text id="g-pct" x="110" y="96"
-            class="g-num" text-anchor="middle" dominant-baseline="auto"
-            fill="#E2F0FF">—</text>
-          <text id="g-sublabel" x="110" y="122"
-            class="g-label" text-anchor="middle">rimasto</text>
-          <text id="g-used" x="110" y="162"
-            class="g-used" text-anchor="middle">—</text>
+            transform="rotate(135,110,105)"/>
+          <text id="g-pct" x="110" y="94" class="g-num"
+            text-anchor="middle" dominant-baseline="auto" fill="#E2F0FF">—</text>
+          <text id="g-sublabel" x="110" y="118" class="g-label"
+            text-anchor="middle">rimasto</text>
+          <text id="g-used" x="110" y="155" class="g-used"
+            text-anchor="middle">—</text>
         </svg>
       </div>
 
-      <div id="countdown" class="gauge-countdown">—</div>
+      <div id="countdown">—</div>
 
-      <!-- Timeline sessione 5h -->
+      <!-- Timeline 5h -->
       <div class="timeline-section">
         <div class="tl-label">FINESTRA SESSIONE · 5 ORE</div>
         <div class="tl-bar">
           <div id="tl-fill" class="tl-fill" style="width:2%;background:var(--muted2)"></div>
         </div>
         <div class="tl-times">
-          <span id="tl-start">in attesa dati…</span>
+          <span id="tl-start">in attesa…</span>
           <span id="tl-end">↺</span>
         </div>
       </div>
 
-      <!-- Sparkline sessione 24h -->
-      <div class="sparkline-section">
-        <div class="sp-label">UTILIZZO SESSIONE · 24 ORE</div>
-        <canvas id="sparkline" width="312" height="36"></canvas>
-      </div>
-    </div>
-
-    <!-- Right: weekly + Claude Design + routine -->
-    <div class="now-stats-col">
-
-      <!-- Weekly -->
-      <div class="weekly-box">
+      <!-- Weekly (spostato qui) -->
+      <div class="weekly-compact" id="weekly-box">
         <div class="box-title">SETTIMANALE · TUTTI I MODELLI</div>
         <div class="weekly-pct-row">
           <span id="weekly-big" class="weekly-big">—</span>
-          <span class="weekly-unit" id="weekly-unit">rimasto</span>
+          <span class="weekly-unit">rimasto</span>
         </div>
         <div class="slim-bar">
           <div id="weekly-fill" class="slim-fill" style="width:0%;background:var(--green)"></div>
         </div>
         <div id="weekly-meta" class="weekly-meta">—</div>
       </div>
+    </div>
 
-      <!-- Claude Design (hidden until data arrives) -->
-      <div class="weekly-box" id="design-box" style="display:none">
+    <!-- ── RIGHT: sparkline grande + extras + aggiorna + footer ──────────── -->
+    <div class="now-right">
+
+      <!-- Sparkline grande -->
+      <div class="sparkline-big-section">
+        <div class="sp-label">UTILIZZO SESSIONE · 24 ORE</div>
+        <canvas id="sparkline"></canvas>
+      </div>
+
+      <!-- Claude Design (opzionale) -->
+      <div class="extra-box" id="design-box" style="display:none">
         <div class="box-title">CLAUDE DESIGN</div>
         <div class="weekly-pct-row">
           <span id="design-big" class="weekly-big" style="color:var(--violet)">—</span>
@@ -436,25 +481,27 @@ body { background: var(--bg); color: var(--text); }
         <div id="design-meta" class="weekly-meta">—</div>
       </div>
 
-      <!-- Routine giornaliere (hidden until data arrives) -->
-      <div class="weekly-box" id="routine-box" style="display:none">
+      <!-- Routine giornaliere (opzionale) -->
+      <div class="extra-box" id="routine-box" style="display:none">
         <div class="box-title">ROUTINE GIORNALIERE</div>
-        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
-          <span id="routine-used" style="font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--cyan)">—</span>
-          <span id="routine-limit" style="font-size:13px;color:var(--muted)">/ —</span>
-          <span style="font-size:11px;color:var(--muted);margin-left:auto" id="routine-meta">—</span>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+          <span id="routine-used"
+            style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;
+                   color:var(--cyan)">—</span>
+          <span id="routine-limit" style="font-size:12px;color:var(--muted)">/ —</span>
+          <span id="routine-meta" style="font-size:10px;color:var(--muted);margin-left:auto">—</span>
         </div>
         <div class="slim-bar">
           <div id="routine-fill" class="slim-fill" style="width:0%;background:var(--cyan)"></div>
         </div>
       </div>
 
-      <!-- Aggiorna -->
+      <!-- Pulsante Aggiorna -->
       <button id="now-refresh-btn" onclick="nowRefresh()">
         <span class="spin-icon">⟳</span> AGGIORNA
       </button>
 
-      <!-- Footer con barra progresso prossimo aggiornamento -->
+      <!-- Barra progresso + footer -->
       <div class="now-footer-wrap">
         <div class="refresh-bar-wrap">
           <div id="refresh-bar"></div>
@@ -464,12 +511,12 @@ body { background: var(--bg); color: var(--text); }
           <span id="last-updated">—</span>
         </div>
       </div>
+
     </div>
   </div>
 
   <!-- ─── CREDITI ──────────────────────────────────────────────────────────── -->
   <div id="page-crediti" class="page">
-
     <div class="crediti-col">
       <div class="box-title">SPESA MENSILE</div>
       <div class="crediti-amount-row">
@@ -480,18 +527,14 @@ body { background: var(--bg); color: var(--text); }
         <div id="cr-fill" class="slim-fill" style="width:0%;background:var(--amber)"></div>
       </div>
       <div id="cr-pct" class="crediti-pct">—</div>
-
       <div id="cr-nodata" class="crediti-no-data" style="display:none">
-        I dati crediti vengono letti tramite OAuth.<br><br>
-        Se il valore non appare, forza un aggiornamento:<br>
-        <strong>Impostazioni → Aggiorna Adesso</strong>
+        Dati crediti letti tramite OAuth.<br><br>
+        Se non appare: <strong>Impost. → Aggiorna Adesso</strong>
       </div>
     </div>
-
     <div class="crediti-col">
       <div class="box-title">SALDO DISPONIBILE</div>
       <div id="cr-balance" class="crediti-balance">—</div>
-
       <div style="margin-top:18px">
         <div class="box-title">PROSSIMO RESET CREDITI</div>
         <div id="cr-reset" class="crediti-reset-label">—</div>
@@ -499,13 +542,15 @@ body { background: var(--bg); color: var(--text); }
     </div>
   </div>
 
-  <!-- ─── SETTINGS ─────────────────────────────────────────────────────────── -->
+  <!-- ─── IMPOSTAZIONI ─────────────────────────────────────────────────────── -->
   <div id="page-settings" class="page">
 
-    <!-- Colonna sinistra: ACCESSO -->
+    <!-- Colonna sinistra -->
     <div class="settings-col">
       <div class="settings-title">ACCESSO CLAUDE</div>
-      <div id="login-status" class="info-card"><span class="s-inf">○ Verifica in corso…</span></div>
+      <div id="login-status" class="info-card">
+        <span class="s-inf">○ Verifica in corso…</span>
+      </div>
 
       <button id="poll-btn" class="btn-secondary" onclick="forcePoll()">
         ⟳ &nbsp;Aggiorna Adesso
@@ -518,10 +563,10 @@ body { background: var(--bg); color: var(--text); }
           <span style="color:var(--muted2)">(per Design e Routine)</span>
         </summary>
         <div class="expand-panel">
-          <b style="color:var(--text)">L'OAuth fornisce sessione, weekly e crediti.</b><br>
-          Per <b>Claude Design %</b> e <b>routine giornaliere</b>:<br>
-          1. Apri <b>claude.ai</b> in Chrome → <b>F12</b> → Network → F5<br>
-          2. Tasto destro su una richiesta → <b>Copy as cURL (bash)</b><br>
+          <b style="color:var(--text)">L'OAuth copre sessione, weekly e crediti.</b><br>
+          Per <b>Claude Design %</b> e <b>routine</b>:<br>
+          1. Apri <b>claude.ai</b> in Chrome → F12 → Network → F5<br>
+          2. Tasto destro richiesta → <b>Copy as cURL (bash)</b><br>
           3. Incolla sotto e clicca Importa
           <textarea id="cookie-text" rows="3"
             placeholder="curl 'https://claude.ai/...' -H 'Cookie: sessionKey=...'"
@@ -539,7 +584,7 @@ body { background: var(--bg); color: var(--text); }
       </button>
     </div>
 
-    <!-- Colonna destra: PREFERENZE + SETUP -->
+    <!-- Colonna destra -->
     <div class="settings-col">
       <div class="settings-title">PREFERENZE</div>
 
@@ -578,22 +623,22 @@ body { background: var(--bg); color: var(--text); }
           <span id="setup-avail-tag" style="color:var(--muted2)">caricamento…</span>
         </summary>
         <div class="expand-panel" style="line-height:1.7">
-          <b style="color:var(--text)">Cosa fa il setup automatico:</b><br>
-          <span style="color:var(--green)">1.</span> Installa Node.js LTS e <b>Claude Code</b><br>
-          <span style="color:var(--green)">2.</span> Lancia <code>claude login</code> (una volta sola)<br>
-          <span style="color:var(--green)">3.</span> Installa Python, Playwright e le dipendenze<br>
-          <span style="color:var(--green)">4.</span> Crea il servizio systemd (avvio automatico)<br>
-          <span style="color:var(--green)">5.</span> Configura Chromium in modalità kiosk<br>
-          <br>
-          <b style="color:var(--cyan)">Comando via SSH / terminale:</b><br>
-          <code id="setup-cmd" style="font-size:9.5px;word-break:break-all;
-            background:var(--bg);display:block;padding:5px 6px;border-radius:4px;
-            border:1px solid var(--border2);margin:4px 0;cursor:pointer"
+          <b style="color:var(--text)">Cosa fa il setup:</b><br>
+          <span style="color:var(--green)">1.</span> Installa Node.js e <b>Claude Code</b><br>
+          <span style="color:var(--green)">2.</span> Lancia <code>claude login</code> (una volta)<br>
+          <span style="color:var(--green)">3.</span> Installa Python, Playwright, dipendenze<br>
+          <span style="color:var(--green)">4.</span> Crea servizio systemd (avvio automatico)<br>
+          <span style="color:var(--green)">5.</span> Configura Chromium in modalità kiosk<br><br>
+          <b style="color:var(--cyan)">Comando SSH:</b><br>
+          <code id="setup-cmd"
+            style="font-size:9.5px;word-break:break-all;background:var(--bg);
+                   display:block;padding:5px 6px;border-radius:4px;
+                   border:1px solid var(--border2);margin:4px 0;cursor:pointer"
             onclick="copySetupCmd()" title="Clicca per copiare">
-            curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/claude/rpi-token-monitor/setup-rpi.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/claude/rpi-token-monitor/setup-rpi.sh | bash
           </code>
           <div id="copy-confirm" style="font-size:10px;color:var(--green);display:none">
-            ✓ Copiato negli appunti
+            ✓ Copiato
           </div>
           <div id="setup-log"></div>
           <button id="setup-btn" class="btn-primary" style="margin-top:8px"
@@ -609,29 +654,10 @@ body { background: var(--bg); color: var(--text); }
         </div>
       </details>
 
-      <!-- Info sviluppatore -->
-      <div style="margin-top:auto;padding-top:6px;border-top:1px solid var(--border);
-                  text-align:center;line-height:1.8">
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:var(--muted);margin-bottom:4px">
-          INFO
-        </div>
-        <div style="font-size:12px;color:var(--text);font-weight:600">Claude Monitor</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">
-          Sviluppato da<br>
-          <a href="https://www.linkedin.com/in/boris-landoni/"
-             target="_blank" rel="noopener noreferrer"
-             style="color:var(--cyan);text-decoration:none;font-weight:700;
-                    font-size:13px;letter-spacing:.3px"
-             onmouseover="this.style.textDecoration='underline'"
-             onmouseout="this.style.textDecoration='none'">
-            Boris Landoni
-          </a>
-        </div>
-        <div style="font-size:10px;color:var(--muted2);margin-top:3px">
-          con l'aiuto dell'intelligenza artificiale ✦
-        </div>
-      </div>
-
+      <!-- Info button -->
+      <button class="btn-info" onclick="openInfo()" style="margin-top:auto">
+        ℹ &nbsp;Info &amp; Sviluppatore
+      </button>
     </div>
   </div>
 
@@ -659,11 +685,40 @@ body { background: var(--bg); color: var(--text); }
   <div id="overlay-msg" class="overlay-msg">Caricamento…</div>
 </div>
 
-<!-- ── Alert utilizzo basso ───────────────────────────────────────────────── -->
+<!-- ── Alert sessione bassa ───────────────────────────────────────────────── -->
 <div id="alert-overlay" onclick="dismissAlert()">
   <div class="alert-icon">⚠</div>
   <div class="alert-title">SESSIONE QUASI ESAURITA</div>
   <div class="alert-body">Meno del 10% rimasto · Tocca per chiudere</div>
+</div>
+
+<!-- ── Info Modal ─────────────────────────────────────────────────────────── -->
+<div id="info-modal" onclick="closeInfoOutside(event)">
+  <div class="info-modal-box">
+    <div class="info-modal-logo">CLAUDE MONITOR</div>
+    <div class="info-modal-sub">RASPBERRY PI DASHBOARD</div>
+    <div class="info-modal-divider"></div>
+    <div class="info-modal-dev">
+      <div class="info-modal-dev-label">SVILUPPATO DA</div>
+      <span class="info-modal-dev-name">Boris Landoni</span>
+      <a href="https://www.linkedin.com/in/boris-landoni/"
+         target="_blank" rel="noopener noreferrer"
+         class="info-modal-dev-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+        </svg>
+        linkedin.com/in/boris-landoni
+      </a>
+    </div>
+    <div class="info-modal-divider"></div>
+    <div class="info-modal-ai">
+      Realizzato con l'aiuto dell'intelligenza artificiale ✦<br>
+      <span style="font-size:10px;opacity:.6">
+        github.com/BorisLandoni/claude-token-monitor
+      </span>
+    </div>
+    <button class="info-modal-close" onclick="closeInfo()">Chiudi</button>
+  </div>
 </div>
 
 <script>
@@ -680,16 +735,13 @@ function setGauge(pctUsed, colorVar) {
   const color   = getComputedStyle(document.documentElement).getPropertyValue(colorVar).trim();
   const visible = G_ARC * (pctUsed / 100);
   const dash    = `${visible.toFixed(2)} ${(G_CIRC - visible).toFixed(2)}`;
-  const arc  = document.getElementById('gauge-arc');
-  const glow = document.getElementById('gauge-glow');
+  const arc = document.getElementById('gauge-arc');
+  const glow= document.getElementById('gauge-glow');
   if (!arc) return;
-  arc.style.strokeDasharray  = dash;
-  arc.setAttribute('stroke', color);
-  glow.style.strokeDasharray = dash;
-  glow.setAttribute('stroke', color);
-  const pctRemain = 100 - pctUsed;
+  arc.style.strokeDasharray  = dash; arc.setAttribute('stroke', color);
+  glow.style.strokeDasharray = dash; glow.setAttribute('stroke', color);
   const gt = document.getElementById('g-pct');
-  if (gt) { gt.textContent = pctRemain + '%'; gt.setAttribute('fill', color); }
+  if (gt) { gt.textContent = (100 - pctUsed) + '%'; gt.setAttribute('fill', color); }
   const gu = document.getElementById('g-used');
   if (gu) gu.textContent = `${pctUsed}% utilizzato`;
 }
@@ -700,7 +752,7 @@ function clearGauge() {
     if (el) el.style.strokeDasharray = `0 ${G_CIRC}`;
   });
   const gt = document.getElementById('g-pct');
-  if (gt) { gt.textContent = '—'; gt.setAttribute('fill', 'var(--muted)'); }
+  if (gt) { gt.textContent = '—'; gt.setAttribute('fill','var(--muted)'); }
   const gu = document.getElementById('g-used');
   if (gu) gu.textContent = '—';
 }
@@ -713,7 +765,7 @@ let currentPage    = 'now';
 let sessionResetTs = null;
 let refreshTimer   = null;
 let hourlyData     = [];
-let sessionHistory = [];   // [{ts, pct}] — campioni session % per sparkline
+let sessionHistory = [];
 let alertShownAt   = 0;
 let alertDismissTs = 0;
 let setupPollTimer = null;
@@ -743,18 +795,26 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 function renderCountdown(now) {
   const el = document.getElementById('countdown');
   if (!el) return;
-  if (!sessionResetTs) { el.textContent = 'in attesa dati…'; el.className = 'gauge-countdown'; return; }
+  if (!sessionResetTs) {
+    el.textContent = 'in attesa dati…';
+    el.className = '';
+    return;
+  }
   const secs = sessionResetTs - Math.floor(now.getTime() / 1000);
-  if (secs <= 0) { el.textContent = 'Reset imminente'; el.className = 'gauge-countdown'; return; }
+  if (secs <= 0) {
+    el.textContent = 'Reset imminente';
+    el.className = '';
+    return;
+  }
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
-  const s = secs % 60;
-  el.textContent = h > 0
-    ? `Si ripristina tra ${h}h ${String(m).padStart(2,'0')}m`
-    : m > 0
-    ? `Si ripristina tra ${m}m ${String(s).padStart(2,'0')}s`
-    : `Si ripristina tra ${s}s`;
-  el.className = 'gauge-countdown' + (secs < 1800 ? ' low' : secs < 7200 ? '' : ' ok');
+  const resetTime = new Date(sessionResetTs * 1000)
+    .toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+  const timeStr = h > 0
+    ? `${h}h ${String(m).padStart(2,'0')}m`
+    : `${m}m ${String(secs % 60).padStart(2,'0')}s`;
+  el.innerHTML = `Si ripristina tra <b>${timeStr}</b> · alle ${resetTime}`;
+  el.className = secs < 1800 ? 'low' : secs < 7200 ? '' : 'ok';
 }
 
 function renderTimeline() {
@@ -762,11 +822,9 @@ function renderTimeline() {
   const start = document.getElementById('tl-start');
   const end   = document.getElementById('tl-end');
   if (!fill) return;
-
   if (!sessionResetTs) {
-    fill.style.width      = '2%';
-    fill.style.background = 'var(--muted2)';
-    if (start) start.textContent = 'in attesa dati…';
+    fill.style.width = '2%'; fill.style.background = 'var(--muted2)';
+    if (start) start.textContent = 'in attesa…';
     if (end)   end.textContent   = '↺';
     return;
   }
@@ -776,7 +834,7 @@ function renderTimeline() {
   const elapsed = Math.max(0, nowTs - startTs);
   const pct     = Math.min(100, Math.round(elapsed / SESSION_SECS * 100));
   const color   = pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--cyan)';
-  fill.style.width      = Math.max(2, pct) + '%';
+  fill.style.width = Math.max(2, pct) + '%';
   fill.style.background = color;
   const fmt = ts => new Date(ts * 1000).toLocaleTimeString('it-IT',
     { hour:'2-digit', minute:'2-digit' });
@@ -788,63 +846,91 @@ function renderRefreshBar() {
   const bar = document.getElementById('refresh-bar');
   if (!bar) return;
   const elapsed = Date.now() - lastLoadTs;
-  const pct     = Math.min(100, (elapsed / pollIntervalMs) * 100);
+  const pct = Math.min(100, (elapsed / pollIntervalMs) * 100);
   bar.style.width = pct + '%';
-  // Colore: ciano → ambra quando si avvicina
   bar.style.background = pct > 85 ? 'var(--amber)' : 'var(--cyan)';
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   SPARKLINE — area chart del % sessione usato nelle ultime 24 ore
+   SPARKLINE — area chart sessione % 24 ore
    ════════════════════════════════════════════════════════════════════════ */
 function drawSparkline() {
   const canvas = document.getElementById('sparkline');
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const W   = canvas.width;
-  const H   = canvas.height;
+
+  // Dimensioni: adatta al contenitore
+  const rect = canvas.parentElement.getBoundingClientRect();
+  const W = Math.round(rect.width) || 400;
+  const H = 140;
+  canvas.width  = W;
+  canvas.height = H;
+  canvas.style.height = H + 'px';
+
+  const ctx  = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
-  const style  = getComputedStyle(document.documentElement);
-  const cMuted = style.getPropertyValue('--muted').trim();
-  const cBorder= style.getPropertyValue('--border').trim();
+  const style   = getComputedStyle(document.documentElement);
+  const cMuted  = style.getPropertyValue('--muted').trim();
+  const cBorder = style.getPropertyValue('--border').trim();
+  const cSurf2  = style.getPropertyValue('--surface2').trim();
 
-  // Baseline sempre visibile
+  // Sfondo sottile
+  ctx.fillStyle = cSurf2 + '40';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, W, H, 6);
+  ctx.fill();
+
+  // Baseline
   ctx.strokeStyle = cBorder;
   ctx.lineWidth   = 1;
   ctx.beginPath(); ctx.moveTo(0, H - 0.5); ctx.lineTo(W, H - 0.5); ctx.stroke();
 
-  // Prendi gli ultimi 48 campioni al massimo (non servono di più sulla larghezza)
-  const pts = sessionHistory.slice(-48);
+  const pts = sessionHistory.slice(-96);  // max 96 punti (8 ore a 5min)
+
   if (pts.length < 2) {
     ctx.fillStyle    = cMuted;
-    ctx.font         = '10px system-ui, sans-serif';
+    ctx.font         = '11px system-ui, sans-serif';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(
-      pts.length === 0 ? 'Accumulo dati… (aggiorna tra qualche minuto)'
-                       : 'Accumulo dati…',
-      W / 2, H / 2 - 1
+      pts.length === 0
+        ? 'Accumulo dati… (aggiorna tra qualche minuto)'
+        : 'Accumulo dati…',
+      W / 2, H / 2
     );
     return;
   }
 
-  // Colori dinamici in base al valore corrente
-  const lastPct = pts[pts.length - 1].pct;
-  const baseColor = lastPct < 50 ? '--cyan' : lastPct < 75 ? '--amber' : '--red';
-  const cLine = style.getPropertyValue(baseColor).trim();
+  // Colore in base al valore corrente
+  const lastPct   = pts[pts.length - 1].pct;
+  const colorName = lastPct < 50 ? '--cyan' : lastPct < 75 ? '--amber' : '--red';
+  const cLine     = style.getPropertyValue(colorName).trim();
 
-  const n  = pts.length;
-  const dx = W / (n - 1);
-  const PAD = 3;   // pixel di margine verticale
-
-  // Coordinata Y da percentuale (pct=0 → fondo, pct=100 → cima)
+  const n   = pts.length;
+  const dx  = W / (n - 1);
+  const PAD = 8;
   const yOf = pct => H - PAD - (pct / 100) * (H - PAD * 2);
 
-  // Area riempita (gradiente semitrasparente)
+  // Griglia orizzontale leggera
+  [25, 50, 75].forEach(v => {
+    const y = Math.round(yOf(v)) + 0.5;
+    ctx.strokeStyle = cBorder;
+    ctx.lineWidth   = 0.5;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle    = cMuted;
+    ctx.font         = '9px system-ui';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(v + '%', 4, y - 1);
+  });
+
+  // Area riempita con gradiente
   const grad = ctx.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, cLine.replace(')', ', 0.35)').replace('rgb', 'rgba'));
-  grad.addColorStop(1, cLine.replace(')', ', 0.03)').replace('rgb', 'rgba'));
+  // Converte hex o rgb in rgba per il gradiente
+  grad.addColorStop(0, hexToRgba(cLine, 0.35));
+  grad.addColorStop(1, hexToRgba(cLine, 0.03));
 
   ctx.beginPath();
   ctx.moveTo(0, H);
@@ -856,18 +942,38 @@ function drawSparkline() {
 
   // Linea superiore
   ctx.beginPath();
-  pts.forEach((p, i) => i === 0 ? ctx.moveTo(0, yOf(p.pct)) : ctx.lineTo(i * dx, yOf(p.pct)));
+  pts.forEach((p, i) =>
+    i === 0 ? ctx.moveTo(0, yOf(p.pct)) : ctx.lineTo(i * dx, yOf(p.pct)));
   ctx.strokeStyle = cLine;
-  ctx.lineWidth   = 1.5;
+  ctx.lineWidth   = 2;
+  ctx.setLineDash([]);
   ctx.stroke();
 
-  // Punto finale (ora)
+  // Punto finale
   const lx = (n - 1) * dx;
   const ly = yOf(lastPct);
   ctx.beginPath();
-  ctx.arc(lx, ly, 3, 0, Math.PI * 2);
+  ctx.arc(lx, ly, 4, 0, Math.PI * 2);
   ctx.fillStyle = cLine;
   ctx.fill();
+  // Etichetta valore corrente
+  ctx.fillStyle    = cLine;
+  ctx.font         = 'bold 11px system-ui';
+  ctx.textAlign    = lx > W - 40 ? 'right' : 'left';
+  ctx.textBaseline = ly < 20 ? 'top' : 'bottom';
+  ctx.fillText(lastPct + '%', lx + (lx > W - 40 ? -7 : 7), ly + (ly < 20 ? 4 : -4));
+}
+
+function hexToRgba(color, alpha) {
+  // Supporta sia hex (#rrggbb) che rgb(r,g,b)
+  if (color.startsWith('#')) {
+    const r = parseInt(color.slice(1,3),16);
+    const g = parseInt(color.slice(3,5),16);
+    const b = parseInt(color.slice(5,7),16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  // già rgb(...)
+  return color.replace('rgb(','rgba(').replace(')',`,${alpha})`);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -878,9 +984,7 @@ function checkAlert() {
   if (pctUsed == null) return;
   const now     = Date.now();
   const overlay = document.getElementById('alert-overlay');
-  if (pctUsed > 90
-      && (now - alertShownAt) > ALERT_COOLDOWN_MS
-      && alertDismissTs <= alertShownAt) {
+  if (pctUsed > 90 && (now - alertShownAt) > ALERT_COOLDOWN_MS && alertDismissTs <= alertShownAt) {
     alertShownAt = now;
     overlay.classList.add('show');
     setTimeout(dismissAlert, 8000);
@@ -889,24 +993,22 @@ function checkAlert() {
     overlay.classList.remove('show');
   }
 }
-
 function dismissAlert() {
   alertDismissTs = Date.now();
   document.getElementById('alert-overlay').classList.remove('show');
 }
 
-async function nowRefresh() {
-  const btn = document.getElementById('now-refresh-btn');
-  if (btn.classList.contains('loading')) return;
-  btn.classList.add('loading');
-  btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNAMENTO…';
-  try {
-    await fetch('/api/poll', { method: 'POST' });
-    await loadData();
-  } catch(e) { /* ignore */ } finally {
-    btn.classList.remove('loading');
-    btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
-  }
+/* ════════════════════════════════════════════════════════════════════════════
+   INFO MODAL
+   ════════════════════════════════════════════════════════════════════════ */
+function openInfo() {
+  document.getElementById('info-modal').classList.add('show');
+}
+function closeInfo() {
+  document.getElementById('info-modal').classList.remove('show');
+}
+function closeInfoOutside(e) {
+  if (e.target === document.getElementById('info-modal')) closeInfo();
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -969,14 +1071,13 @@ function render() {
 function renderNow() {
   const acc = DATA.account || {};
 
-  // Session gauge
+  // Gauge sessione
   let pctUsed = null;
   if (acc.session_pct_used != null) {
     pctUsed = acc.session_pct_used;
   } else if (acc.messages_remaining != null && acc.messages_limit) {
     pctUsed = Math.round((acc.messages_limit - acc.messages_remaining) / acc.messages_limit * 100);
   }
-
   if (pctUsed != null) {
     const colorVar = pctUsed < 50 ? '--green' : pctUsed < 75 ? '--amber' : '--red';
     setGauge(pctUsed, colorVar);
@@ -994,15 +1095,15 @@ function renderNow() {
   if (wPct != null) {
     const wRemain = acc.weekly_pct_remaining ?? (100 - wPct);
     const wColor  = wPct < 50 ? 'var(--green)' : wPct < 75 ? 'var(--amber)' : 'var(--red)';
-    setText('weekly-big', wRemain + '%');
-    setStyle('weekly-big', 'color', wColor);
+    setText('weekly-big',  wRemain + '%');
+    setStyle('weekly-big',  'color', wColor);
     setStyle('weekly-fill', 'width', wPct + '%');
     setStyle('weekly-fill', 'background', wColor);
     setText('weekly-meta', acc.weekly_resets_label
       ? `Reset: ${acc.weekly_resets_label} · ${wPct}% utilizzato`
       : `${wPct}% utilizzato`);
   } else {
-    setText('weekly-big', '—');
+    setText('weekly-big',  '—');
     setText('weekly-meta', 'Accedi per vedere i limiti settimanali');
   }
 
@@ -1013,8 +1114,8 @@ function renderNow() {
     const dPct    = acc.design_pct_used;
     const dRemain = acc.design_pct_remaining ?? (100 - dPct);
     const dColor  = dPct < 50 ? 'var(--violet)' : dPct < 75 ? 'var(--amber)' : 'var(--red)';
-    setText('design-big', dRemain + '%');
-    setStyle('design-big', 'color', dColor);
+    setText('design-big',  dRemain + '%');
+    setStyle('design-big',  'color', dColor);
     setStyle('design-fill', 'width', dPct + '%');
     setStyle('design-fill', 'background', dColor);
     setText('design-meta', `${dPct}% utilizzato`);
@@ -1022,7 +1123,7 @@ function renderNow() {
     designBox.style.display = 'none';
   }
 
-  // Routine giornaliere
+  // Routine
   const routineBox = document.getElementById('routine-box');
   if (acc.routines_limit != null) {
     routineBox.style.display = '';
@@ -1032,15 +1133,15 @@ function renderNow() {
     const rColor = rPct > 75 ? 'var(--red)' : rPct > 50 ? 'var(--amber)' : 'var(--cyan)';
     setText('routine-used',  rUsed);
     setText('routine-limit', '/ ' + rLimit);
-    setText('routine-meta',  rUsed === 0 ? 'Nessuna usata oggi' : `${rPct}% utilizzato`);
-    setStyle('routine-fill', 'width',      rPct + '%');
+    setText('routine-meta',  rUsed === 0 ? 'Nessuna usata' : `${rPct}%`);
+    setStyle('routine-fill', 'width', rPct + '%');
     setStyle('routine-fill', 'background', rColor);
-    setStyle('routine-used', 'color',      rColor);
+    setStyle('routine-used', 'color', rColor);
   } else {
     routineBox.style.display = 'none';
   }
 
-  // Footer
+  // Footer status
   const s  = DATA.session || {};
   const st = document.getElementById('session-status');
   if (s.logged_in && (acc.session_status || 'ok') === 'ok') {
@@ -1061,41 +1162,30 @@ function renderNow() {
    RENDER — CREDITI
    ════════════════════════════════════════════════════════════════════════ */
 function renderCrediti() {
-  const acc    = DATA.account || {};
-  const spent  = acc.credits_spent_eur;
-  const limit  = acc.credits_limit_eur;
-  const bal    = acc.credits_balance_eur;
-  const reset  = acc.credits_reset_label;
-  const nodata = document.getElementById('cr-nodata');
+  const acc   = DATA.account || {};
+  const spent = acc.credits_spent_eur;
+  const limit = acc.credits_limit_eur;
+  const bal   = acc.credits_balance_eur;
+  const reset = acc.credits_reset_label;
+  const nodata= document.getElementById('cr-nodata');
 
   if (spent == null && limit == null && bal == null) {
     nodata.style.display = '';
-    setText('cr-spent',   '—');
-    setText('cr-limit',   '');
-    setText('cr-balance', '—');
-    setText('cr-reset',   '—');
-    setStyle('cr-fill', 'width', '0%');
-    setText('cr-pct', '');
+    setText('cr-spent','—'); setText('cr-limit','');
+    setText('cr-balance','—'); setText('cr-reset','—');
+    setStyle('cr-fill','width','0%'); setText('cr-pct','');
     return;
   }
   nodata.style.display = 'none';
-
-  const spentStr = spent != null ? fmtEur(spent) : '—';
-  setText('cr-spent', spentStr);
-  setStyle('cr-spent', 'color', 'var(--amber)');
+  setText('cr-spent', spent != null ? fmtEur(spent) : '—');
   setText('cr-limit', limit != null ? `/ ${fmtEur(limit)}` : '');
-
   if (spent != null && limit != null && limit > 0) {
     const pct = Math.min(100, Math.round(spent / limit * 100));
-    const barColor = pct > 75 ? 'var(--red)' : pct > 50 ? 'var(--amber)' : 'var(--green)';
-    setStyle('cr-fill', 'width', pct + '%');
-    setStyle('cr-fill', 'background', barColor);
+    const c   = pct > 75 ? 'var(--red)' : pct > 50 ? 'var(--amber)' : 'var(--green)';
+    setStyle('cr-fill','width', pct + '%');
+    setStyle('cr-fill','background', c);
     setText('cr-pct', `${pct}% utilizzato`);
-  } else {
-    setStyle('cr-fill', 'width', '0%');
-    setText('cr-pct', '');
-  }
-
+  } else { setStyle('cr-fill','width','0%'); setText('cr-pct',''); }
   setText('cr-balance', bal != null ? fmtEur(bal) : '—');
   setText('cr-reset',   reset || '—');
 }
@@ -1111,7 +1201,6 @@ function renderSettings() {
   // Auth status
   const el    = document.getElementById('login-status');
   const lines = [];
-
   if (s.oauth_available) {
     if (acc.session_status === 'oauth_expired') {
       lines.push('<span class="s-err">⚠ OAuth scaduto — esegui <code>claude login</code></span>');
@@ -1119,33 +1208,22 @@ function renderSettings() {
       lines.push('<span class="s-ok">● OAuth Claude Code: attivo</span>');
     }
   } else {
-    lines.push(
-      '<span class="s-err">✗ Claude Code non trovato</span>' +
-      '<br><small style="opacity:.7">Installa Claude Code: <code>claude login</code></small>'
-    );
+    lines.push('<span class="s-err">✗ Claude Code non trovato</span>' +
+      '<br><small style="opacity:.7">Installa Claude Code ed esegui <code>claude login</code></small>');
   }
-
   if (s.cookies_available) {
     const age = s.cookie_age_hours ? ` (${s.cookie_age_hours}h fa)` : '';
     lines.push(`<span class="s-ok">● Cookie sessionKey importati${age}</span>`);
   } else {
     lines.push('<span class="s-inf">○ Cookie: non importati — opzionale</span>');
   }
-
   el.innerHTML = lines.join('<br>');
 
-  // Poll interval
   document.getElementById('poll-interval').value = String(cfg.poll_interval || 60);
-
-  // Theme buttons
   document.querySelectorAll('.theme-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'dark')));
-
-  // Server URL
   const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
   setText('server-url', base);
-
-  // Setup availability
   refreshSetupStatus();
 }
 
@@ -1158,37 +1236,29 @@ async function refreshSetupStatus() {
     const tag  = document.getElementById('setup-avail-tag');
     const btn  = document.getElementById('setup-btn');
     if (data.available) {
-      tag.textContent  = '● disponibile';
-      tag.style.color  = 'var(--green)';
+      tag.textContent = '● disponibile'; tag.style.color = 'var(--green)';
       btn.style.display = '';
     } else {
-      tag.textContent  = '○ solo via SSH';
-      tag.style.color  = 'var(--muted2)';
+      tag.textContent = '○ solo via SSH'; tag.style.color = 'var(--muted2)';
       btn.style.display = 'none';
     }
     if (data.running) {
-      btn.disabled    = true;
-      btn.textContent = 'Setup in corso…';
+      btn.disabled = true; btn.textContent = 'Setup in corso…';
       updateSetupLog(data);
-      if (!setupPollTimer) {
-        setupPollTimer = setInterval(pollSetupLog, 2000);
-      }
+      if (!setupPollTimer) setupPollTimer = setInterval(pollSetupLog, 2000);
     }
-  } catch(e) { /* offline */ }
+  } catch(e) {}
 }
 
 async function runSetupRpi() {
-  const btn    = document.getElementById('setup-btn');
-  const logEl  = document.getElementById('setup-log');
-  const hint   = document.getElementById('setup-login-hint');
-  btn.disabled    = true;
-  btn.textContent = 'Avvio setup…';
-  logEl.style.display = '';
-  logEl.textContent   = 'Avvio in corso…\n';
-  hint.style.display  = 'none';
-
+  const btn  = document.getElementById('setup-btn');
+  const logEl= document.getElementById('setup-log');
+  const hint = document.getElementById('setup-login-hint');
+  btn.disabled = true; btn.textContent = 'Avvio setup…';
+  logEl.style.display = ''; logEl.textContent = 'Avvio in corso…\n';
+  hint.style.display = 'none';
   try {
-    const res  = await fetch('/api/setup-rpi', { method: 'POST' });
+    const res  = await fetch('/api/setup-rpi', { method:'POST' });
     const data = await res.json();
     if (!data.ok) {
       logEl.textContent = '✗ ' + data.reason;
@@ -1198,7 +1268,7 @@ async function runSetupRpi() {
     setupPollTimer = setInterval(pollSetupLog, 2000);
     pollSetupLog();
   } catch(e) {
-    logEl.textContent = '✗ Errore: ' + e.message;
+    logEl.textContent = '✗ ' + e.message;
     btn.disabled = false; btn.textContent = '▶ Esegui Setup';
   }
 }
@@ -1208,27 +1278,23 @@ async function pollSetupLog() {
     const data = await fetch('/api/setup-rpi/log').then(r => r.json());
     updateSetupLog(data);
     if (!data.running) {
-      clearInterval(setupPollTimer);
-      setupPollTimer = null;
+      clearInterval(setupPollTimer); setupPollTimer = null;
       const btn = document.getElementById('setup-btn');
       btn.disabled = false; btn.textContent = '↺ Ri-esegui Setup';
-      // Show login hint if credentials likely missing
-      const hint = document.getElementById('setup-login-hint');
       if (data.log.includes('Credenziali non trovate')) {
-        hint.style.display = '';
+        document.getElementById('setup-login-hint').style.display = '';
       }
       await loadData();
     }
-  } catch(e) { /* ignore */ }
+  } catch(e) {}
 }
 
 function updateSetupLog(data) {
   const logEl = document.getElementById('setup-log');
   if (!logEl) return;
   logEl.style.display = '';
-  // Strip ANSI color codes for readability in the web UI
   logEl.textContent = (data.log || '').replace(/\x1b\[[0-9;]*m/g, '');
-  logEl.scrollTop   = logEl.scrollHeight;
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
 function copySetupCmd() {
@@ -1242,6 +1308,20 @@ function copySetupCmd() {
 /* ════════════════════════════════════════════════════════════════════════════
    ACTIONS
    ════════════════════════════════════════════════════════════════════════ */
+async function nowRefresh() {
+  const btn = document.getElementById('now-refresh-btn');
+  if (btn.classList.contains('loading')) return;
+  btn.classList.add('loading');
+  btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNAMENTO…';
+  try {
+    await fetch('/api/poll', { method:'POST' });
+    await loadData();
+  } catch(e) {} finally {
+    btn.classList.remove('loading');
+    btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
+  }
+}
+
 async function doLogout() {
   await fetch('/api/logout', { method:'POST' });
   await loadData();
@@ -1265,14 +1345,12 @@ async function importCookies() {
       await loadData();
     } else {
       document.getElementById('login-status').innerHTML =
-        `<span class="s-err">● Importazione fallita: ${data.message}</span>`;
+        `<span class="s-err">● Fallito: ${data.message}</span>`;
     }
-  } catch (e) {
+  } catch(e) {
     document.getElementById('login-status').innerHTML =
       `<span class="s-err">● Errore: ${e.message}</span>`;
-  } finally {
-    hideOverlay();
-  }
+  } finally { hideOverlay(); }
 }
 
 async function forcePoll() {
@@ -1288,6 +1366,7 @@ async function forcePoll() {
 
 async function savePollInterval() {
   const v = parseInt(document.getElementById('poll-interval').value);
+  pollIntervalMs = v * 1000;
   await fetch('/api/settings', {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ poll_interval: v }),
@@ -1310,17 +1389,15 @@ async function changeTheme(theme) {
    UTILS
    ════════════════════════════════════════════════════════════════════════ */
 function applyTheme(t) { document.documentElement.dataset.theme = t; }
-
 function showOverlay(msg) {
   document.getElementById('overlay-msg').innerHTML =
     (msg || 'Caricamento…').replace('\n','<br>');
   document.getElementById('overlay').classList.add('show');
 }
 function hideOverlay() { document.getElementById('overlay').classList.remove('show'); }
-
 function fmtEur(n) {
   if (n == null || isNaN(n)) return '—';
-  return n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+  return n.toLocaleString('it-IT', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' €';
 }
 function setText(id, v)     { const e=document.getElementById(id); if(e) e.textContent=String(v); }
 function setStyle(id, p, v) { const e=document.getElementById(id); if(e) e.style[p]=v; }
