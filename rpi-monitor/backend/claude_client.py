@@ -26,6 +26,11 @@ COOKIES_FILE   = Path(__file__).parent / 'cookies.json'
 ENDPOINTS_FILE = Path(__file__).parent / 'endpoints.json'
 CHROMIUM_PATH  = os.getenv('CHROMIUM_PATH', '')
 
+# Claude Code OAuth credentials (auto-managed by Claude Code)
+OAUTH_CREDENTIALS_FILE = Path.home() / '.claude' / '.credentials.json'
+OAUTH_USAGE_URL        = 'https://api.anthropic.com/api/oauth/usage'
+OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
+
 # Candidate endpoints tried when polling (best candidates first)
 CANDIDATE_URLS = [
     'https://claude.ai/api/organizations',
@@ -368,6 +373,108 @@ class ClaudeClient:
         if not has_session:
             msg += ' (attenzione: nessun cookie di sessione riconosciuto)'
         return len(cookies), msg
+
+    # ── OAuth (Claude Code credentials, primary auth) ─────────────────────────
+
+    def has_oauth(self) -> bool:
+        return OAUTH_CREDENTIALS_FILE.exists()
+
+    def has_auth(self) -> bool:
+        """True se c'è almeno un metodo di auth disponibile (OAuth O cookie)."""
+        return self.has_oauth() or self.has_cookies()
+
+    def get_oauth_token(self) -> Optional[str]:
+        """Legge il token OAuth dal file gestito da Claude Code."""
+        if not OAUTH_CREDENTIALS_FILE.exists():
+            return None
+        try:
+            data = json.loads(OAUTH_CREDENTIALS_FILE.read_text())
+            return data.get('claudeAiOauth', {}).get('accessToken')
+        except Exception as e:
+            print(f'[oauth] errore lettura credentials: {e}')
+            return None
+
+    async def poll_oauth_usage(self) -> Optional[dict]:
+        """
+        Chiama /api/oauth/usage e restituisce un dict nel formato 'account'.
+        Mappa: five_hour → session, seven_day → weekly, extra_usage → credits.
+        """
+        token = self.get_oauth_token()
+        if not token:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as cli:
+                resp = await cli.get(
+                    OAUTH_USAGE_URL,
+                    headers={
+                        'Authorization': f'Bearer {token}',
+                        'anthropic-beta': OAUTH_BETA_HEADER,
+                    },
+                )
+            if resp.status_code == 401:
+                print('[oauth] 401 — token scaduto, esegui claude /login')
+                return {'_error': 'oauth_expired'}
+            if resp.status_code != 200:
+                print(f'[oauth] HTTP {resp.status_code}: {resp.text[:200]}')
+                return None
+
+            data = resp.json()
+            out: dict = {'plan': 'pro'}
+
+            # Sessione 5h
+            fh = data.get('five_hour') or {}
+            if fh.get('utilization') is not None:
+                spct = round(float(fh['utilization']))
+                out['session_pct_used']      = spct
+                out['session_pct_remaining'] = 100 - spct
+            if fh.get('resets_at'):
+                out['reset_at']             = fh['resets_at']
+                out['session_resets_at_ts'] = self._iso_to_ts(fh['resets_at'])
+                out['reset_at_ts']          = out['session_resets_at_ts']
+
+            # Weekly 7d
+            sd = data.get('seven_day') or {}
+            if sd.get('utilization') is not None:
+                wpct = round(float(sd['utilization']))
+                out['weekly_pct_used']      = wpct
+                out['weekly_pct_remaining'] = 100 - wpct
+            if sd.get('resets_at'):
+                out['weekly_resets_at_ts'] = self._iso_to_ts(sd['resets_at'])
+                # Etichetta giorno settimana in italiano
+                try:
+                    import datetime as _dt
+                    d = _dt.datetime.fromtimestamp(out['weekly_resets_at_ts'])
+                    days_it = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+                    out['weekly_resets_label'] = days_it[d.weekday()]
+                except Exception:
+                    pass
+
+            # Crediti (extra_usage, in centesimi EUR)
+            eu = data.get('extra_usage') or {}
+            if eu.get('is_enabled') and eu.get('monthly_limit') is not None:
+                cur = eu.get('currency', 'EUR')
+                # Heuristica unità: se utilization*limit ≈ used → cents
+                limit_cents = float(eu['monthly_limit'])
+                used_cents  = float(eu.get('used_credits', 0))
+                out['credits_limit_eur']   = round(limit_cents / 100, 2)
+                out['credits_spent_eur']   = round(used_cents  / 100, 2)
+                out['credits_balance_eur'] = round((limit_cents - used_cents) / 100, 2)
+
+            print(f'[oauth] session:{out.get("session_pct_used")}% weekly:{out.get("weekly_pct_used")}% spesi:{out.get("credits_spent_eur")}€')
+            return out
+
+        except Exception as e:
+            print(f'[oauth] errore: {e}')
+            return None
+
+    @staticmethod
+    def _iso_to_ts(iso: str) -> Optional[int]:
+        try:
+            import datetime as _dt
+            s = iso.replace('Z', '+00:00')
+            return int(_dt.datetime.fromisoformat(s).timestamp())
+        except Exception:
+            return None
 
     # ── Login (one-time) ──────────────────────────────────────────────────────
 
