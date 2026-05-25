@@ -20,7 +20,8 @@ import store
 from claude_client import ClaudeClient
 
 PORT = int(os.getenv('PORT', 8080))
-FRONTEND_DIR = Path(__file__).parent.parent / 'frontend'
+_repo_frontend = Path(__file__).parent.parent / 'frontend'
+FRONTEND_DIR   = _repo_frontend if _repo_frontend.exists() else Path(__file__).parent
 
 client = ClaudeClient()
 
@@ -292,5 +293,5 @@ if FRONTEND_DIR.exists():
 
 if __name__ == '__main__':
     import uvicorn
-    print(f'\nClaude Monitor RPi → http://0.0.0.0:{PORT}')
+    print(f'\nClaude Monitor RPi -> http://0.0.0.0:{PORT}')
     uvicorn.run('server:app', host='0.0.0.0', port=PORT, reload=False)
