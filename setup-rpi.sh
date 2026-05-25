@@ -180,73 +180,70 @@ else
     warn "Il servizio non risulta attivo. Controlla: journalctl -u $SERVICE_NAME -n 30"
 fi
 
-# ── 10. Display 5" HDMI 800x480 touch (lcdwiki) ─────────────
-step "Configurazione display 5\" HDMI 800x480..."
+# ── 10. Display 5" HDMI 800x480 + Touch GPIO ADS7846 (lcdwiki)─
+# Equivalente a: git clone goodtft/LCD-show && sudo ./LCD5-show
+# ma senza il reboot automatico e senza dipendere da repo esterni.
+step "Configurazione display 5\" HDMI 800x480 + touch GPIO..."
 
-# Percorso config.txt cambia tra Bullseye e Bookworm
+NEED_REBOOT=0
+
+# Percorso config.txt cambia tra Bullseye (/boot) e Bookworm (/boot/firmware)
 if [ -f /boot/firmware/config.txt ]; then
     CONFIG_FILE="/boot/firmware/config.txt"
 elif [ -f /boot/config.txt ]; then
     CONFIG_FILE="/boot/config.txt"
 else
     CONFIG_FILE=""
+    warn "config.txt non trovato — skip configurazione display"
 fi
 
-DISPLAY_CONFIGURED=0
 if [ -n "$CONFIG_FILE" ]; then
     if grep -q "hdmi_cvt 800 480" "$CONFIG_FILE" 2>/dev/null; then
-        ok "Risoluzione display già configurata in $CONFIG_FILE"
-        DISPLAY_CONFIGURED=1
+        ok "Display già configurato in $CONFIG_FILE"
     else
+        # Rimuovi righe HDMI precedenti per evitare duplicati
+        sudo sed -i \
+            '/^max_usb_current=/d;/^hdmi_group=/d;/^hdmi_mode=/d' \
+            "$CONFIG_FILE"
+        sudo sed -i \
+            '/^hdmi_cvt/d;/^hdmi_drive=/d;/^display_rotate=/d' \
+            "$CONFIG_FILE"
+        sudo sed -i '/^dtoverlay=ads7846/d' "$CONFIG_FILE"
+
+        # Aggiunge config display 800x480 + overlay touch ADS7846
+        # (stessa configurazione del goodtft LCD5-show)
         sudo tee -a "$CONFIG_FILE" > /dev/null <<'DISPLAY_CONF'
 
-# ── Claude Monitor — 5" HDMI Display 800x480 (lcdwiki) ───────
+# ── Claude Monitor — 5" HDMI 800x480 + Touch GPIO (ADS7846) ──
 max_usb_current=1
 hdmi_group=2
 hdmi_mode=87
 hdmi_cvt 800 480 60 6 0 0 0
 hdmi_drive=1
 display_rotate=0
+dtoverlay=ads7846,cs=1,penirq=25,penirq_pull=2,speed=50000,keep_vref_on=0,swapxy=0,pmax=255,xohms=150,xmin=200,xmax=3900,ymin=200,ymax=3900
 DISPLAY_CONF
-        ok "Risoluzione 800x480 aggiunta a $CONFIG_FILE"
-        DISPLAY_CONFIGURED=1
+        ok "Config HDMI + touch ADS7846 aggiunta a $CONFIG_FILE"
+        NEED_REBOOT=1
     fi
 
-    # Touch screen
-    # Il display lcdwiki 5" HDMI può avere touch USB (plug-and-play)
-    # oppure touch resistivo via GPIO (serve overlay ADS7846).
-    # Rilevamento automatico: se presente USB HID touch → nessuna config.
-    # In caso di touch GPIO, il blocco commentato sotto va decommentato.
-    if ! grep -q "ads7846\|claude_touch" "$CONFIG_FILE" 2>/dev/null; then
-        sudo tee -a "$CONFIG_FILE" > /dev/null <<'TOUCH_CONF'
-# Touch GPIO (ADS7846) — decommenta SOLO se il touch non funziona via USB:
-#dtoverlay=ads7846,cs=1,penirq=25,penirq_pull=2,speed=50000,keep_vref_on=0,swapxy=0,pmax=255,xohms=150,xmin=200,xmax=3900,ymin=200,ymax=3900
-# claude_touch=configured
-TOUCH_CONF
-        ok "Overlay touch aggiunto (commentato — attivo solo se necessario)"
+    # Calibrazione touch X11 (file copiato da goodtft/LCD-show/usr/...)
+    XORG_DIR="/usr/share/X11/xorg.conf.d"
+    CALIB_FILE="$XORG_DIR/99-calibration.conf"
+    if [ ! -f "$CALIB_FILE" ]; then
+        sudo mkdir -p "$XORG_DIR"
+        sudo tee "$CALIB_FILE" > /dev/null <<'CALIB_CONF'
+Section "InputClass"
+        Identifier      "calibration"
+        MatchProduct    "ADS7846 Touchscreen"
+        Option  "Calibration"   "3932 300 294 3801"
+        Option  "SwapAxes"      "0"
+EndSection
+CALIB_CONF
+        ok "Calibrazione touch X11 configurata"
+    else
+        ok "Calibrazione touch già presente"
     fi
-else
-    warn "config.txt non trovato — configura manualmente la risoluzione"
-fi
-
-# Rotazione schermo per orientamento landscape (Wayland / X11)
-# Imposta la rotazione a livello di display manager se necessario
-if [ "$DISPLAY_CONFIGURED" = "1" ]; then
-    # Crea script di calibrazione touch da eseguire al primo avvio
-    TOUCH_CAL="$INSTALL_DIR/touch-calibrate.sh"
-    cat > "$TOUCH_CAL" <<'TOUCHSCRIPT'
-#!/usr/bin/env bash
-# Calibrazione touch screen 5" lcdwiki — esegui una volta dopo il riavvio
-# Richiede: sudo apt-get install -y xinput-calibrator
-if command -v xinput_calibrator &>/dev/null; then
-    xinput_calibrator
-else
-    echo "Installa con: sudo apt-get install -y xinput-calibrator"
-    echo "Poi esegui: xinput_calibrator"
-fi
-TOUCHSCRIPT
-    chmod +x "$TOUCH_CAL"
-    ok "Script calibrazione touch salvato in $TOUCH_CAL"
 fi
 
 # ── 11. Kiosk Chromium (modalità display) ────────────────────
@@ -292,3 +289,19 @@ echo "    journalctl -u $SERVICE_NAME -f        # log in tempo reale"
 echo ""
 echo -e "  ${YELLOW}Il servizio si avvia automaticamente ad ogni riaccensione.${RESET}"
 echo ""
+
+# ── Riavvio per display (se necessario) ──────────────────────
+if [ "${NEED_REBOOT:-0}" = "1" ]; then
+    echo -e "${YELLOW}${BOLD}"
+    echo "  ╔══════════════════════════════════════════════╗"
+    echo "  ║  Riavvio necessario per attivare il display  ║"
+    echo "  ╚══════════════════════════════════════════════╝"
+    echo -e "${RESET}"
+    if [ "$NON_INTERACTIVE" = "0" ]; then
+        echo "  Premi INVIO per riavviare adesso, o Ctrl+C per farlo dopo."
+        read -r
+        sudo reboot
+    else
+        echo -e "  Esegui manualmente: ${CYAN}sudo reboot${RESET}"
+    fi
+fi
