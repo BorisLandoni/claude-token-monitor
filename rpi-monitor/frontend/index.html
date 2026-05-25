@@ -926,7 +926,7 @@ function renderSettings() {
 async function doLogin() {
   const email = document.getElementById('s-email').value.trim();
   const pwd   = document.getElementById('s-pwd').value;
-  if (!email || !pwd) { alert('Inserisci email e password'); return; }
+  if (!email) { alert('Inserisci la tua email'); return; }
   const hasPwd = document.getElementById('s-pwd').value.trim();
   const overlayMsg = hasPwd
     ? 'Accesso a Claude.ai in corso…\n(circa 30–60 secondi)'
