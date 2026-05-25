@@ -563,19 +563,27 @@ body { background: var(--bg); color: var(--text); }
           <span style="color:var(--muted2)">(per Design e Routine)</span>
         </summary>
         <div class="expand-panel">
-          <b style="color:var(--text)">L'OAuth copre sessione, weekly e crediti.</b><br>
-          Per <b>Claude Design %</b> e <b>routine</b>:<br>
-          1. Apri <b>claude.ai</b> in Chrome → F12 → Network → F5<br>
-          2. Tasto destro richiesta → <b>Copy as cURL (bash)</b><br>
-          3. Incolla sotto e clicca Importa
+          <b style="color:var(--text)">Serve per Claude Design % e Routine giornaliere.</b><br><br>
+          <span style="color:var(--cyan);font-weight:600">Come copiare la richiesta giusta:</span><br>
+          1. Vai su <b>claude.ai</b> (già loggato) → premi <b>F12</b><br>
+          2. Tab <b>Network</b> → nel filtro scrivi <b style="color:var(--amber)">organizations</b><br>
+          3. Premi <b>F5</b> per ricaricare la pagina<br>
+          4. Clicca sulla richiesta <code>claude.ai/api/organizations/…</code><br>
+          5. Tasto destro → <b>Copy as cURL (bash)</b><br>
+          <span style="color:var(--muted2);font-size:10px">
+            ✓ Il testo deve contenere <code>sessionKey=sk-ant-sid01-…</code><br>
+            ✗ NON copiare richieste ad assets-proxy.anthropic.com
+          </span>
           <textarea id="cookie-text" rows="3"
-            placeholder="curl 'https://claude.ai/...' -H 'Cookie: sessionKey=...'"
+            placeholder="curl 'https://claude.ai/api/organizations/...' -H 'cookie: sessionKey=sk-ant-sid01-...'"
             style="width:100%;margin-top:8px;background:var(--bg);color:var(--text);
                    border:1px solid var(--border2);border-radius:6px;padding:8px;
                    font-family:monospace;font-size:10px;resize:vertical"></textarea>
           <button class="btn-secondary" style="margin-top:6px" onclick="importCookies()">
             Importa cookie
           </button>
+          <div id="import-result" style="display:none;margin-top:8px;padding:8px;
+               border-radius:6px;font-size:11px;line-height:1.5"></div>
         </div>
       </details>
 
@@ -1328,9 +1336,29 @@ async function doLogout() {
 }
 
 async function importCookies() {
-  const ta   = document.getElementById('cookie-text');
-  const text = (ta.value || '').trim();
-  if (!text) { alert('Incolla il comando cURL dalla DevTools di Chrome'); return; }
+  const ta     = document.getElementById('cookie-text');
+  const result = document.getElementById('import-result');
+  const text   = (ta.value || '').trim();
+
+  if (!text) {
+    showImportResult(false, 'Incolla prima il comando cURL copiato da Chrome.');
+    return;
+  }
+  // Avviso rapido se si vede assets-proxy
+  if (text.includes('assets-proxy.anthropic.com') || !text.includes('claude.ai')) {
+    showImportResult(false,
+      '✗ Richiesta sbagliata — contiene assets-proxy, non claude.ai.\n' +
+      'Filtra Network per "organizations" e copia quella richiesta.');
+    return;
+  }
+  if (!text.includes('sessionKey') && !text.includes('cookie')) {
+    showImportResult(false,
+      '✗ Nessun cookie trovato nel testo.\n' +
+      'Assicurati di copiare una richiesta autenticata (deve contenere sessionKey=…).');
+    return;
+  }
+
+  showImportResult(null, '⟳ Importazione in corso…');
   showOverlay('Importazione cookie e prima sincronizzazione…\n(circa 20-40 secondi)');
   try {
     const res  = await fetch('/api/import-cookies', {
@@ -1340,17 +1368,29 @@ async function importCookies() {
     const data = await res.json();
     if (data.ok) {
       ta.value = '';
-      document.getElementById('login-status').innerHTML =
-        `<span class="s-ok">● ${data.message} — carico dati…</span>`;
+      showImportResult(true, `✓ ${data.message}\nI dati Design e Routine appariranno nella pagina ADESSO.`);
       await loadData();
     } else {
-      document.getElementById('login-status').innerHTML =
-        `<span class="s-err">● Fallito: ${data.message}</span>`;
+      showImportResult(false, `✗ ${data.message}`);
     }
   } catch(e) {
-    document.getElementById('login-status').innerHTML =
-      `<span class="s-err">● Errore: ${e.message}</span>`;
+    showImportResult(false, `✗ Errore di rete: ${e.message}`);
   } finally { hideOverlay(); }
+}
+
+function showImportResult(ok, msg) {
+  const el = document.getElementById('import-result');
+  if (!el) return;
+  el.style.display    = '';
+  el.style.background = ok === true  ? 'rgba(0,232,122,.1)'  :
+                        ok === false ? 'rgba(255,68,85,.1)'   :
+                        'var(--surface2)';
+  el.style.border     = `1px solid ${ok === true ? 'var(--green)' : ok === false ? 'var(--red)' : 'var(--border)'}`;
+  el.style.color      = ok === true  ? 'var(--green)'  :
+                        ok === false ? 'var(--red)'    :
+                        'var(--muted)';
+  el.style.whiteSpace = 'pre-wrap';
+  el.textContent = msg;
 }
 
 async function forcePoll() {
