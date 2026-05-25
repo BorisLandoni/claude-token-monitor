@@ -29,6 +29,12 @@ client = ClaudeClient()
 
 def process_account_limits(limits: dict):
     reset_at_ts = store.to_unix_ts(limits.get('reset_at') or limits.get('session_resets_at'))
+    # Preserve credits/design data from previous Playwright scrape when fast httpx
+    # poll runs (it won't return billing data).
+    prev = store.account or {}
+    def _keep(key):
+        return limits.get(key) if limits.get(key) is not None else prev.get(key)
+
     store.account = {
         # Count-based (may be None for Pro accounts that only show %)
         'messages_remaining': limits.get('messages_remaining'),
@@ -38,14 +44,22 @@ def process_account_limits(limits: dict):
         'session_pct_used':      limits.get('session_pct_used'),
         'session_pct_remaining': limits.get('session_pct_remaining'),
         # Session reset
-        'reset_at':           limits.get('reset_at') or limits.get('session_resets_at'),
-        'reset_at_ts':        reset_at_ts,
+        'reset_at':             limits.get('reset_at') or limits.get('session_resets_at'),
+        'reset_at_ts':          reset_at_ts,
         'session_resets_at_ts': limits.get('session_resets_at_ts') or reset_at_ts,
         # Weekly limits
         'weekly_pct_used':      limits.get('weekly_pct_used'),
         'weekly_pct_remaining': limits.get('weekly_pct_remaining'),
-        'weekly_resets_label':  limits.get('weekly_resets_label'),  # e.g. "sab 17:59"
+        'weekly_resets_label':  limits.get('weekly_resets_label'),
         'weekly_resets_at_ts':  store.to_unix_ts(limits.get('weekly_resets_at')),
+        # Claude Design limits (DOM scrape only — preserved across fast polls)
+        'design_pct_used':      _keep('design_pct_used'),
+        'design_pct_remaining': _keep('design_pct_remaining'),
+        # Credits / billing (DOM scrape only — preserved across fast polls)
+        'credits_spent_eur':    _keep('credits_spent_eur'),
+        'credits_limit_eur':    _keep('credits_limit_eur'),
+        'credits_balance_eur':  _keep('credits_balance_eur'),
+        'credits_reset_label':  _keep('credits_reset_label'),
         # Meta
         'plan':           limits.get('plan', 'pro'),
         'session_status': 'ok',
