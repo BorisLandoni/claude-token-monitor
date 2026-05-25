@@ -63,8 +63,13 @@ fi
 
 # ── 3. Claude Code ────────────────────────────────────────────
 step "Installazione Claude Code (claude CLI)..."
+ARCH=$(uname -m)
 if command -v claude &>/dev/null; then
     ok "Claude Code già installato: $(claude --version 2>/dev/null || echo 'ok')"
+elif [ "$ARCH" = "armv7l" ] || [ "$ARCH" = "armv6l" ]; then
+    warn "Architettura 32-bit ($ARCH) non supportata da Claude Code."
+    warn "Il monitor funziona ugualmente se copi ~/.claude/.credentials.json"
+    warn "da un PC dove Claude Code è già installato (via scp)."
 else
     # Assicura che npm sia disponibile (NodeSource a volte non lo include)
     if ! command -v npm &>/dev/null; then
@@ -72,6 +77,11 @@ else
     fi
     NPM_BIN=$(command -v npm)
     sudo "$NPM_BIN" install -g @anthropic-ai/claude-code --quiet
+    # Esegui postinstall se necessario
+    CLAUDE_MOD="$(npm root -g 2>/dev/null)/@anthropic-ai/claude-code/install.cjs"
+    if [ -f "$CLAUDE_MOD" ] && ! command -v claude &>/dev/null; then
+        node "$CLAUDE_MOD" 2>/dev/null || true
+    fi
     ok "Claude Code installato"
 fi
 
@@ -83,7 +93,8 @@ if [ -f "$CRED_FILE" ]; then
     ok "Credenziali Claude Code già presenti — login saltato"
 elif [ "$NON_INTERACTIVE" = "1" ]; then
     warn "Credenziali non trovate."
-    warn "Al termine del setup apri un terminale e digita: claude login"
+    warn "Opzione A (64-bit): apri un terminale e digita: claude login"
+    warn "Opzione B (32-bit): copia ~/.claude/.credentials.json dal PC via scp"
 else
     echo ""
     echo -e "  ${YELLOW}Devi effettuare il login a Claude Code.${RESET}"
