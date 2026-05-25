@@ -287,13 +287,25 @@ class ClaudeClient:
     # ── Login (one-time) ──────────────────────────────────────────────────────
 
     async def login_playwright(self, email: str, password: str) -> tuple[bool, str]:
-        """Log in to claude.ai. Saves cookies + discovers usage API endpoint."""
+        """
+        Log in to claude.ai.
+        - Se password fornita → login classico email+password (headless).
+        - Se password vuota  → magic link: apre finestra visibile, compila
+          l'email e aspetta fino a 5 minuti che l'utente incolli il link
+          dall'email nella barra degli indirizzi della finestra aperta.
+        """
         if not HAS_PLAYWRIGHT:
             return False, 'Playwright non installato. Esegui: pip install playwright && playwright install chromium'
 
+        magic_link_mode = not password.strip()
+
         try:
             async with async_playwright() as pw:
-                browser = await pw.chromium.launch(**self._make_playwright_launch_opts())
+                launch_opts = self._make_playwright_launch_opts()
+                if magic_link_mode:
+                    launch_opts['headless'] = False   # finestra visibile
+
+                browser = await pw.chromium.launch(**launch_opts)
                 ctx = await browser.new_context(
                     user_agent=_BROWSER_HEADERS['User-Agent'],
                     viewport={'width': 1280, 'height': 800},
@@ -337,20 +349,48 @@ class ClaudeClient:
                 except Exception as e:
                     print(f'[login] email step: {e}')
 
-                # Step 3: fill password
-                try:
-                    await page.locator('input[type="password"]').first.fill(password)
-                    await page.keyboard.press('Enter')
-                except Exception as e:
-                    print(f'[login] password step: {e}')
+                if magic_link_mode:
+                    # Mostra istruzioni nella finestra Playwright
+                    print('[login] modalita magic link — in attesa che utente clicchi il link...')
+                    await page.evaluate("""() => {
+                        const d = document.createElement('div');
+                        d.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:99999;
+                            background:#0D1E2E;color:#E2F0FF;padding:18px 24px;
+                            border-bottom:2px solid #00C8FF;font-family:sans-serif;
+                            font-size:15px;line-height:1.6;`;
+                        d.innerHTML = `
+                            <b style="color:#00C8FF">CLAUDE MONITOR — Magic Link Login</b><br>
+                            Hai ricevuto un'email da Anthropic con un link di accesso.<br>
+                            <b>Copia il link dall'email e incollalo nella barra degli indirizzi
+                            di questa finestra.</b><br>
+                            <small style="color:#5A7FA0">La finestra si chiuderà automaticamente al completamento.</small>`;
+                        document.body.prepend(d);
+                    }""")
+                    # Attendi fino a 5 minuti che l'URL cambi a claude.ai (login OK)
+                    try:
+                        await page.wait_for_url(
+                            lambda url: 'claude.ai' in url and '/login' not in url,
+                            timeout=300_000
+                        )
+                        await page.wait_for_load_state('networkidle', timeout=15_000)
+                    except Exception:
+                        pass
+                    await page.wait_for_timeout(2000)
+                else:
+                    # Step 3: fill password
+                    try:
+                        await page.locator('input[type="password"]').first.fill(password)
+                        await page.keyboard.press('Enter')
+                    except Exception as e:
+                        print(f'[login] password step: {e}')
 
-                # Step 4: wait for redirect
-                try:
-                    await page.wait_for_url('https://claude.ai/**', timeout=30_000)
-                    await page.wait_for_load_state('networkidle', timeout=15_000)
-                except Exception:
-                    pass
-                await page.wait_for_timeout(2000)
+                    # Step 4: wait for redirect
+                    try:
+                        await page.wait_for_url('https://claude.ai/**', timeout=30_000)
+                        await page.wait_for_load_state('networkidle', timeout=15_000)
+                    except Exception:
+                        pass
+                    await page.wait_for_timeout(2000)
 
                 # Step 5: navigate to settings/utilizzo to get usage data
                 try:
