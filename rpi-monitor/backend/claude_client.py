@@ -30,6 +30,8 @@ CHROMIUM_PATH  = os.getenv('CHROMIUM_PATH', '')
 OAUTH_CREDENTIALS_FILE = Path.home() / '.claude' / '.credentials.json'
 OAUTH_USAGE_URL        = 'https://api.anthropic.com/api/oauth/usage'
 OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
+OAUTH_MIN_INTERVAL     = 58    # secondi minimi tra due chiamate OAuth
+OAUTH_BACKOFF_429      = 180   # secondi di attesa dopo un 429
 
 # Candidate endpoints tried when polling (best candidates first)
 CANDIDATE_URLS = [
@@ -376,6 +378,9 @@ class ClaudeClient:
 
     # ── OAuth (Claude Code credentials, primary auth) ─────────────────────────
 
+    _oauth_last_call: float = 0        # timestamp ultima chiamata riuscita
+    _oauth_retry_after: float = 0      # timestamp fino a quando NON chiamare (dopo 429)
+
     def has_oauth(self) -> bool:
         return OAUTH_CREDENTIALS_FILE.exists()
 
@@ -398,7 +403,20 @@ class ClaudeClient:
         """
         Chiama /api/oauth/usage e restituisce un dict nel formato 'account'.
         Mappa: five_hour → session, seven_day → weekly, extra_usage → credits.
+        Gestisce rate limit (429) con backoff automatico.
         """
+        now = time.time()
+
+        # Backoff dopo 429: aspetta OAUTH_BACKOFF_429 secondi
+        if now < self._oauth_retry_after:
+            wait = int(self._oauth_retry_after - now)
+            print(f'[oauth] rate limited — riprovo tra {wait}s')
+            return None
+
+        # Intervallo minimo tra chiamate (evita burst)
+        if now - self._oauth_last_call < OAUTH_MIN_INTERVAL:
+            return None  # usa i dati già in store (non serve ri-loggare)
+
         token = self.get_oauth_token()
         if not token:
             return None
@@ -414,9 +432,15 @@ class ClaudeClient:
             if resp.status_code == 401:
                 print('[oauth] 401 — token scaduto, esegui claude /login')
                 return {'_error': 'oauth_expired'}
+            if resp.status_code == 429:
+                self._oauth_retry_after = time.time() + OAUTH_BACKOFF_429
+                print(f'[oauth] 429 rate limit — pausa {OAUTH_BACKOFF_429}s')
+                return None
             if resp.status_code != 200:
                 print(f'[oauth] HTTP {resp.status_code}: {resp.text[:200]}')
                 return None
+
+            self._oauth_last_call = time.time()  # aggiorna timestamp solo su successo
 
             data = resp.json()
             out: dict = {'plan': 'pro'}
