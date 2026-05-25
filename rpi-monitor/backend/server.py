@@ -81,22 +81,44 @@ async def poll_loop():
     while True:
         interval = max(30, store.settings.get('poll_interval', 60))
         await asyncio.sleep(interval)
-        if not client.has_cookies():
+        if not client.has_auth():
             continue
         try:
-            limits = await client.poll_limits()
-            if limits is None:
-                print('[poll] httpx fallito, provo Playwright...')
-                limits = await client.poll_with_playwright()
-
-            if limits and limits.get('_error') == 'session_expired':
-                if store.account:
-                    store.account['session_status'] = 'expired'
-                    store.save()
-            elif limits:
-                process_account_limits(limits)
+            await do_poll()
         except Exception as e:
             print(f'[poll] errore: {e}')
+
+
+async def do_poll():
+    """
+    Strategia poll:
+    1. OAuth (Claude Code) → sessione, weekly, crediti (primario, ~1s).
+    2. Se cookie disponibili → DOM scrape Playwright per Claude Design + routine.
+    3. Merge: i dati DOM arricchiscono quelli OAuth.
+    """
+    merged: dict = {}
+
+    # OAuth primario
+    oauth_data = await client.poll_oauth_usage()
+    if oauth_data and oauth_data.get('_error') == 'oauth_expired':
+        if store.account:
+            store.account['session_status'] = 'oauth_expired'
+            store.save()
+        return
+    if oauth_data:
+        merged.update(oauth_data)
+
+    # Cookie/DOM secondario (per design + routine)
+    if client.has_cookies():
+        dom_data = await client.poll_with_playwright()
+        if dom_data and not dom_data.get('_error'):
+            # OAuth ha priorità su session/weekly; DOM aggiunge il resto
+            for k, v in dom_data.items():
+                if k not in merged or merged.get(k) is None:
+                    merged[k] = v
+
+    if merged:
+        process_account_limits(merged)
 
 
 # ── App lifespan ──────────────────────────────────────────────────────────────
@@ -212,25 +234,27 @@ async def login(body: LoginRequest):
 
 @app.get('/api/session')
 def get_session():
+    has_oauth   = client.has_oauth()
+    has_cookies = client.has_cookies()
     return {
-        'logged_in': client.has_cookies(),
-        'email': store.settings.get('email', ''),
-        'session_status': (store.account or {}).get('session_status', 'not_logged_in'),
-        'cookie_age_hours': round(client.get_cookie_age_seconds() / 3600, 1)
+        'logged_in':         has_oauth or has_cookies,
+        'oauth_available':   has_oauth,
+        'cookies_available': has_cookies,
+        'email':             store.settings.get('email', ''),
+        'session_status':    (store.account or {}).get('session_status', 'not_logged_in'),
+        'cookie_age_hours':  round(client.get_cookie_age_seconds() / 3600, 1)
             if client.get_cookie_age_seconds() is not None else None,
     }
 
 
 @app.post('/api/poll')
 async def force_poll():
-    """Manually trigger an immediate poll of claude.ai."""
-    limits = await client.poll_limits()
-    if not limits:
-        limits = await client.poll_with_playwright()
-    if limits and not limits.get('_error'):
-        process_account_limits(limits)
+    """Trigger immediato di un poll completo (OAuth + DOM se cookie)."""
+    try:
+        await do_poll()
         return {'ok': True, 'account': store.account}
-    return {'ok': False, 'reason': str(limits)}
+    except Exception as e:
+        return {'ok': False, 'reason': str(e)}
 
 
 class ImportCookies(BaseModel):
@@ -243,13 +267,8 @@ async def import_cookies(body: ImportCookies):
     n, msg = client.import_cookies_from_text(body.text)
     if n == 0:
         return {'ok': False, 'message': msg}
-    # Subito un poll per popolare l'account
     try:
-        limits = await client.poll_limits()
-        if not limits or limits.get('_error'):
-            limits = await client.poll_with_playwright()
-        if limits and not limits.get('_error'):
-            process_account_limits(limits)
+        await do_poll()
     except Exception as e:
         print(f'[import] poll dopo import: {e}')
     return {'ok': True, 'message': msg, 'count': n}
