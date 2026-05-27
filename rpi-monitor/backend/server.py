@@ -6,6 +6,7 @@ Default port: 8080
 
 import asyncio
 import os
+import re as _re
 import subprocess
 import threading
 import time
@@ -447,6 +448,100 @@ def get_setup_log():
         'log': ''.join(_setup_log),
         'available': _find_setup_script() is not None,
     }
+
+
+# ── Claude Login (kiosk) ─────────────────────────────────────────────────────
+
+_login_url:    Optional[str] = None
+_login_status: str           = 'idle'   # idle|starting|waiting|success|error
+_login_proc                  = None
+_login_cred_mtime_before: Optional[float] = None
+
+
+def _cred_mtime() -> Optional[float]:
+    f = Path.home() / '.claude' / '.credentials.json'
+    try:
+        return f.stat().st_mtime
+    except Exception:
+        return None
+
+
+@app.post('/api/login/start')
+async def start_claude_login():
+    global _login_url, _login_status, _login_proc, _login_cred_mtime_before
+    if _login_status in ('waiting', 'starting'):
+        return {'ok': True, 'url': _login_url, 'status': _login_status}
+
+    _login_url = None
+    _login_status = 'starting'
+    _login_cred_mtime_before = _cred_mtime()
+
+    def _run():
+        global _login_url, _login_status, _login_proc
+        try:
+            env = os.environ.copy()
+            env['TERM'] = 'dumb'
+            env['NO_COLOR'] = '1'
+            _login_proc = subprocess.Popen(
+                ['claude', 'login'],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, env=env,
+            )
+            for line in _login_proc.stdout:
+                print(f'[login] {line.rstrip()}')
+                m = _re.search(r'https?://\S{20,}', line)
+                if m:
+                    _login_url = m.group().rstrip('.,)')
+                    _login_status = 'waiting'
+                if _cred_mtime() != _login_cred_mtime_before:
+                    _login_status = 'success'
+                    break
+            _login_proc.wait(timeout=300)
+            if _login_status not in ('success',):
+                new_mtime = _cred_mtime()
+                _login_status = 'success' if new_mtime != _login_cred_mtime_before else 'error'
+        except Exception as e:
+            _login_status = 'error'
+            print(f'[login] errore: {e}')
+        finally:
+            _login_proc = None
+
+    threading.Thread(target=_run, daemon=True).start()
+    # Aspetta fino a 5s che appaia l'URL
+    for _ in range(10):
+        await asyncio.sleep(0.5)
+        if _login_url or _login_status == 'error':
+            break
+    return {'ok': True, 'url': _login_url, 'status': _login_status}
+
+
+@app.get('/api/login/status')
+def get_login_status():
+    return {'url': _login_url, 'status': _login_status}
+
+
+@app.post('/api/login/cancel')
+def cancel_login():
+    global _login_status, _login_proc
+    if _login_proc:
+        try:
+            _login_proc.terminate()
+        except Exception:
+            pass
+    _login_status = 'idle'
+    return {'ok': True}
+
+
+# ── Restart servizio ──────────────────────────────────────────────────────────
+
+@app.post('/api/restart')
+def restart_service():
+    def _do():
+        time.sleep(1)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'claude-monitor'], timeout=30)
+    threading.Thread(target=_do, daemon=True).start()
+    return {'ok': True}
 
 
 # ── Version / Update endpoints ───────────────────────────────────────────────

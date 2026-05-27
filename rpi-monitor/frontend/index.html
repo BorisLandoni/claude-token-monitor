@@ -396,6 +396,31 @@ body { background: var(--bg); color: var(--text); }
   cursor:pointer; transition:filter .15s;
 }
 .info-modal-close:hover { filter:brightness(1.1); }
+
+/* ── Login Modal ─────────────────────────────────────────────────────────── */
+#login-modal {
+  position:fixed; inset:0; z-index:2000;
+  background:rgba(5,13,22,.88); backdrop-filter:blur(6px);
+  display:none; align-items:center; justify-content:center;
+}
+#login-modal.show { display:flex; }
+.login-modal-box {
+  background:var(--surface); border:1px solid var(--border2);
+  border-radius:16px; padding:22px 26px; width:340px;
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  box-shadow:0 0 60px rgba(0,200,255,.12);
+}
+.login-modal-title { font-size:14px; font-weight:700; color:var(--cyan); letter-spacing:1.5px; }
+.login-modal-sub   { font-size:11px; color:var(--muted); text-align:center; line-height:1.6; }
+#login-qr-wrap {
+  width:180px; height:180px; background:var(--bg);
+  border:1px solid var(--border2); border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden;
+}
+#login-qr-wrap img { width:180px; height:180px; display:block; }
+#login-qr-spinner { font-size:12px; color:var(--muted); animation:spin .7s linear infinite; }
+#login-modal-status { font-size:11px; text-align:center; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -580,10 +605,31 @@ body { background: var(--bg); color: var(--text); }
       <button id="poll-btn" class="btn-secondary" onclick="forcePoll()">
         ⟳ &nbsp;Aggiorna Adesso
       </button>
+      <button id="relogin-btn" class="btn-primary" style="display:none"
+              onclick="startClaudeLogin()">
+        ↺ &nbsp;Rinnova Login Claude
+      </button>
 
       <button class="btn-danger" onclick="doLogout()">
         Cancella sessione locale
       </button>
+
+      <!-- Versione Software -->
+      <div class="settings-title" style="margin-top:4px">VERSIONE SOFTWARE</div>
+      <div class="info-card" style="font-size:11px;line-height:1.8">
+        <span id="ver-current" style="color:var(--cyan);font-weight:700">—</span>
+        &nbsp;<span id="ver-commit" style="color:var(--muted);font-size:10px"></span>
+      </div>
+      <button id="check-update-btn" class="btn-secondary" onclick="checkForUpdate()">
+        ↑ Verifica Aggiornamenti
+      </button>
+      <div id="update-status" style="display:none;padding:8px;border-radius:6px;
+           font-size:11px;line-height:1.5;border:1px solid var(--border)"></div>
+      <button id="update-btn" class="btn-primary" style="display:none"
+              onclick="runUpdate()">
+        ↑ Aggiorna Adesso
+      </button>
+      <div id="update-log"></div>
     </div>
 
     <!-- Colonna destra -->
@@ -631,10 +677,9 @@ body { background: var(--bg); color: var(--text); }
         <div class="expand-panel" style="line-height:1.7">
           <b style="color:var(--text)">Cosa fa il setup:</b><br>
           <span style="color:var(--green)">1.</span> Installa Node.js e <b>Claude Code</b><br>
-          <span style="color:var(--green)">2.</span> Lancia <code>claude login</code> (una volta)<br>
-          <span style="color:var(--green)">3.</span> Installa Python, Playwright, dipendenze<br>
-          <span style="color:var(--green)">4.</span> Crea servizio systemd (avvio automatico)<br>
-          <span style="color:var(--green)">5.</span> Configura Chromium in modalità kiosk<br><br>
+          <span style="color:var(--green)">2.</span> Installa Python, Playwright, dipendenze<br>
+          <span style="color:var(--green)">3.</span> Crea servizio systemd (avvio automatico)<br>
+          <span style="color:var(--green)">4.</span> Configura Chromium in modalità kiosk<br><br>
           <b style="color:var(--cyan)">Comando SSH:</b><br>
           <code id="setup-cmd"
             style="font-size:9.5px;word-break:break-all;background:var(--bg);
@@ -651,31 +696,8 @@ curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/c
                   onclick="runSetupRpi()">
             ▶ Esegui Setup su questo dispositivo
           </button>
-          <div id="setup-login-hint"
-               style="display:none;margin-top:8px;padding:8px;background:var(--surface);
-                      border-radius:6px;font-size:11px;color:var(--amber);line-height:1.5">
-            ⚠ Dopo il setup apri un terminale e digita:<br>
-            <code style="color:var(--cyan)">claude login</code>
-          </div>
         </div>
       </details>
-
-      <!-- Aggiornamento Software -->
-      <div class="settings-title">VERSIONE SOFTWARE</div>
-      <div class="info-card" style="font-size:11px;line-height:1.8">
-        <span id="ver-current" style="color:var(--cyan);font-weight:700">—</span>
-        &nbsp;<span id="ver-commit" style="color:var(--muted);font-size:10px"></span>
-      </div>
-      <button id="check-update-btn" class="btn-secondary" onclick="checkForUpdate()">
-        ↑ Verifica Aggiornamenti
-      </button>
-      <div id="update-status" style="display:none;padding:8px;border-radius:6px;
-           font-size:11px;line-height:1.5;border:1px solid var(--border)"></div>
-      <button id="update-btn" class="btn-primary" style="display:none"
-              onclick="runUpdate()">
-        ↑ Aggiorna Adesso
-      </button>
-      <div id="update-log"></div>
 
       <!-- Info button -->
       <button class="btn-info" onclick="openInfo()" style="margin-top:auto">
@@ -713,6 +735,28 @@ curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/c
   <div class="alert-icon">⚠</div>
   <div class="alert-title">SESSIONE QUASI ESAURITA</div>
   <div class="alert-body">Meno del 10% rimasto · Tocca per chiudere</div>
+</div>
+
+<!-- ── Login Modal ────────────────────────────────────────────────────────── -->
+<div id="login-modal">
+  <div class="login-modal-box">
+    <div class="login-modal-title">RINNOVA LOGIN CLAUDE</div>
+    <div class="login-modal-sub">
+      Scansiona il QR con il telefono<br>e autenticati su claude.ai
+    </div>
+    <div id="login-qr-wrap">
+      <span id="login-qr-spinner">⟳</span>
+    </div>
+    <div id="login-modal-status" style="color:var(--muted)">Avvio autenticazione…</div>
+    <div id="login-url-text"
+         style="display:none;font-size:9px;color:var(--muted2);word-break:break-all;
+                text-align:center;max-width:290px;line-height:1.5"></div>
+    <div style="display:flex;gap:8px;width:100%">
+      <button class="btn-secondary" style="flex:1" onclick="closeLoginModal()">Annulla</button>
+      <button id="login-done-btn" class="btn-primary" style="flex:1;display:none"
+              onclick="loginDone()">✓ Riavvia Servizio</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── Info Modal ─────────────────────────────────────────────────────────── -->
@@ -1235,15 +1279,7 @@ function renderSettings() {
   const oauthExpired = s.oauth_available && acc.session_status === 'oauth_expired';
   if (s.oauth_available) {
     if (oauthExpired) {
-      lines.push(
-        '<span class="s-err">⚠ Token OAuth scaduto</span><br>' +
-        '<span style="font-size:10px;color:var(--muted);line-height:1.8">' +
-        'Apri un terminale sul Raspberry e digita:<br>' +
-        '<code style="color:var(--cyan);font-size:11px">claude login</code><br>' +
-        'Poi riavvia il servizio:<br>' +
-        '<code style="color:var(--cyan);font-size:11px">sudo systemctl restart claude-monitor</code>' +
-        '</span>'
-      );
+      lines.push('<span class="s-err">⚠ Token OAuth scaduto</span>');
     } else {
       lines.push('<span class="s-ok">● OAuth Claude Code: attivo</span>');
     }
@@ -1255,9 +1291,11 @@ function renderSettings() {
   }
   el.innerHTML = lines.join('<br>');
 
-  // Nascondi "Aggiorna Adesso" se OAuth scaduto — non serve a nulla
-  const pollBtn = document.getElementById('poll-btn');
-  if (pollBtn) pollBtn.style.display = oauthExpired ? 'none' : '';
+  // Mostra "Rinnova Login" solo se scaduto; nascondi "Aggiorna Adesso" inutile
+  const pollBtn    = document.getElementById('poll-btn');
+  const reloginBtn = document.getElementById('relogin-btn');
+  if (pollBtn)    pollBtn.style.display    = oauthExpired ? 'none' : '';
+  if (reloginBtn) reloginBtn.style.display = oauthExpired ? ''     : 'none';
 
   document.getElementById('poll-interval').value = String(cfg.poll_interval || 60);
   document.querySelectorAll('.theme-btn').forEach(btn =>
@@ -1530,6 +1568,7 @@ async function checkForUpdate() {
     status.textContent = '✗ Errore di rete';
   } finally {
     btn.textContent = '↑ Verifica Aggiornamenti'; btn.disabled = false;
+    loadVersionInfo(); // aggiorna la card con la versione live dal server
   }
 }
 
@@ -1597,6 +1636,89 @@ async function _pollUpdateLog() {
       setTimeout(() => location.reload(), 3000);
     }
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CLAUDE LOGIN MODAL
+   ════════════════════════════════════════════════════════════════════════ */
+let _loginPollTimer = null;
+
+async function startClaudeLogin() {
+  document.getElementById('login-modal').classList.add('show');
+  document.getElementById('login-qr-wrap').innerHTML = '<span id="login-qr-spinner" style="font-size:12px;color:var(--muted);animation:spin .7s linear infinite">⟳</span>';
+  document.getElementById('login-modal-status').style.color = 'var(--muted)';
+  document.getElementById('login-modal-status').textContent = 'Avvio autenticazione…';
+  document.getElementById('login-url-text').style.display = 'none';
+  document.getElementById('login-done-btn').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/login/start', { method: 'POST' });
+    const data = await res.json();
+    if (data.url) {
+      _showLoginQr(data.url);
+    } else {
+      document.getElementById('login-modal-status').style.color = 'var(--red)';
+      document.getElementById('login-modal-status').textContent =
+        '✗ Impossibile ottenere il link di login.\nUsa SSH: claude login';
+    }
+    if (data.status !== 'success') {
+      _loginPollTimer = setInterval(_pollLoginStatus, 2000);
+    } else {
+      _onLoginSuccess();
+    }
+  } catch(e) {
+    document.getElementById('login-modal-status').style.color = 'var(--red)';
+    document.getElementById('login-modal-status').textContent = '✗ Errore: ' + e.message;
+  }
+}
+
+function _showLoginQr(url) {
+  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' +
+                encodeURIComponent(url) + '&bgcolor=0a1422&color=00c8ff&margin=8';
+  document.getElementById('login-qr-wrap').innerHTML =
+    `<img src="${qrUrl}" alt="QR Login" onerror="this.style.display='none'">`;
+  const urlEl = document.getElementById('login-url-text');
+  urlEl.style.display = '';
+  urlEl.textContent = url;
+  document.getElementById('login-modal-status').style.color = 'var(--amber)';
+  document.getElementById('login-modal-status').textContent =
+    '⟳ In attesa di autenticazione…';
+}
+
+async function _pollLoginStatus() {
+  try {
+    const data = await fetch('/api/login/status').then(r => r.json());
+    if (data.status === 'success') {
+      clearInterval(_loginPollTimer); _loginPollTimer = null;
+      _onLoginSuccess();
+    } else if (data.status === 'error') {
+      clearInterval(_loginPollTimer); _loginPollTimer = null;
+      document.getElementById('login-modal-status').style.color = 'var(--red)';
+      document.getElementById('login-modal-status').textContent =
+        '✗ Autenticazione fallita. Riprova.';
+    }
+  } catch(e) {}
+}
+
+function _onLoginSuccess() {
+  document.getElementById('login-qr-wrap').innerHTML =
+    '<span style="font-size:40px">✓</span>';
+  document.getElementById('login-modal-status').style.color = 'var(--green)';
+  document.getElementById('login-modal-status').textContent =
+    '✓ Login completato!';
+  document.getElementById('login-done-btn').style.display = '';
+}
+
+async function loginDone() {
+  document.getElementById('login-modal-status').textContent = 'Riavvio servizio…';
+  fetch('/api/restart', { method: 'POST' }).catch(() => {});
+  setTimeout(() => location.reload(), 4000);
+}
+
+function closeLoginModal() {
+  clearInterval(_loginPollTimer); _loginPollTimer = null;
+  fetch('/api/login/cancel', { method: 'POST' }).catch(() => {});
+  document.getElementById('login-modal').classList.remove('show');
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
