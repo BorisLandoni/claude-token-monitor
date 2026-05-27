@@ -122,6 +122,14 @@ def process_account_limits(limits: dict):
 # ── Background poll loop ──────────────────────────────────────────────────────
 
 async def poll_loop():
+    # Poll immediato al boot — evita di mostrare dati vecchi al primo avvio
+    await asyncio.sleep(2)
+    if client.has_auth():
+        try:
+            await do_poll()
+            print('[poll] poll iniziale completato')
+        except Exception as e:
+            print(f'[poll] errore avvio: {e}')
     while True:
         interval = max(60, store.settings.get('poll_interval', 60))
         await asyncio.sleep(interval)
