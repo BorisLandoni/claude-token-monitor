@@ -1004,31 +1004,37 @@ function drawSparkline() {
     }
   }
 
-  // ── Marker reset sessione (ogni 5h, calcolati da sessionResetTs) ─────────
-  if (sessionResetTs) {
-    const cGreen = style.getPropertyValue('--green').trim();
-    const SESSION = 5 * 3600;
-    // Cammina indietro da sessionResetTs di 5h alla volta finché siamo dentro la finestra 24h
-    for (let t = sessionResetTs; t >= startTs; t -= SESSION) {
-      if (t > nowTs) continue;  // reset futuri non li mostriamo (sarebbe il prossimo)
-      const x = Math.round(xOf(t)) + 0.5;
-      // Linea verticale verde tratteggiata
-      ctx.strokeStyle = cGreen;
-      ctx.lineWidth   = 1.2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.moveTo(x, PAD_TOP);
-      ctx.lineTo(x, H - PAD_BOT);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Etichetta in alto
-      ctx.fillStyle    = cGreen;
-      ctx.font         = 'bold 9px system-ui';
-      ctx.textAlign    = x > W - 30 ? 'right' : 'left';
-      ctx.textBaseline = 'top';
-      ctx.fillText('↺ reset', x + (x > W - 30 ? -3 : 3), PAD_TOP);
+  // ── Marker reset sessione: rilevati dai cali nei dati storici ────────────
+  // La sessione Claude parte al primo messaggio dopo un reset e dura 5h da lì,
+  // NON ogni 5h fisse. Quindi rileviamo i reset come cali bruschi della %.
+  // Usiamo i dati grezzi (non downsamplati) per maggior precisione.
+  const cGreen = style.getPropertyValue('--green').trim();
+  const rawPts = sessionHistory.filter(p => p.ts >= startTs);
+  const resetMarkers = [];
+  for (let i = 1; i < rawPts.length; i++) {
+    const prev = rawPts[i - 1].pct;
+    const curr = rawPts[i].pct;
+    // Calo > 30 punti % in un singolo intervallo = reset sessione
+    if (prev - curr > 30 && prev > 25) {
+      resetMarkers.push(rawPts[i].ts);
     }
   }
+  resetMarkers.forEach(t => {
+    const x = Math.round(xOf(t)) + 0.5;
+    ctx.strokeStyle = cGreen;
+    ctx.lineWidth   = 1.2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, PAD_TOP);
+    ctx.lineTo(x, H - PAD_BOT);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle    = cGreen;
+    ctx.font         = 'bold 9px system-ui';
+    ctx.textAlign    = x > W - 30 ? 'right' : 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('↺ reset', x + (x > W - 30 ? -3 : 3), PAD_TOP);
+  });
 
   // Baseline
   ctx.strokeStyle = cBorder;
