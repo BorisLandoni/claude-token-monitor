@@ -29,6 +29,24 @@ html, body { width: 800px; height: 480px; overflow: hidden;
   --text: #EBD8FF; --muted: #8060A8; --muted2: #503878;
   --header-bg: #080412;
 }
+[data-theme="light"] {
+  --bg: #EDF2F8; --surface: #FFFFFF; --surface2: #E2ECF6;
+  --border: #BDD0E4; --border2: #9AB8D4;
+  --text: #0E2035; --muted: #4A6E90; --muted2: #7A9AB8;
+  --header-bg: #DDE8F4;
+}
+[data-theme="green"] {
+  --bg: #071A0C; --surface: #0D2814; --surface2: #10321A;
+  --border: #1A5028; --border2: #246038;
+  --text: #D8FFE4; --muted: #50986A; --muted2: #307850;
+  --header-bg: #040E07;
+}
+[data-theme="amber"] {
+  --bg: #130C02; --surface: #1E1405; --surface2: #271A07;
+  --border: #402A0A; --border2: #583C12;
+  --text: #FFF0D0; --muted: #9A7838; --muted2: #785820;
+  --header-bg: #0A0601;
+}
 :root {
   --cyan:   #00C8FF; --cyan-glow:   rgba(0,200,255,.25);
   --green:  #00E87A; --green-glow:  rgba(0,232,122,.25);
@@ -243,10 +261,10 @@ body { background: var(--bg); color: var(--text); }
 }
 .btn-info:hover { border-color:var(--cyan); background:var(--surface2); }
 
-.theme-row { display:flex; gap:8px; }
+.theme-row { display:flex; gap:6px; flex-wrap:wrap; }
 .theme-btn {
-  flex:1; padding:9px 4px; font-size:12px; border-radius:7px;
-  background:var(--surface); border:1px solid var(--border);
+  flex:1; min-width:calc(33.333% - 6px); padding:8px 4px; font-size:11px;
+  border-radius:7px; background:var(--surface); border:1px solid var(--border);
   color:var(--text); cursor:pointer; transition:all .2s;
 }
 .theme-btn.active { border-color:var(--cyan); color:var(--cyan); font-weight:700;
@@ -563,37 +581,6 @@ body { background: var(--bg); color: var(--text); }
         ⟳ &nbsp;Aggiorna Adesso
       </button>
 
-      <!-- Import cookie -->
-      <details>
-        <summary class="expand-toggle">
-          <span class="et-title">+ Importa cookie da Chrome</span>
-          <span style="color:var(--muted2)">(per Design e Routine)</span>
-        </summary>
-        <div class="expand-panel">
-          <b style="color:var(--text)">Serve per Claude Design % e Routine giornaliere.</b><br><br>
-          <span style="color:var(--cyan);font-weight:600">Come copiare la richiesta giusta:</span><br>
-          1. Vai su <b>claude.ai</b> (già loggato) → premi <b>F12</b><br>
-          2. Tab <b>Network</b> → nel filtro scrivi <b style="color:var(--amber)">organizations</b><br>
-          3. Premi <b>F5</b> per ricaricare la pagina<br>
-          4. Clicca sulla richiesta <code>claude.ai/api/organizations/…</code><br>
-          5. Tasto destro → <b>Copy as cURL (bash)</b><br>
-          <span style="color:var(--muted2);font-size:10px">
-            ✓ Il testo deve contenere <code>sessionKey=sk-ant-sid01-…</code><br>
-            ✗ NON copiare richieste ad assets-proxy.anthropic.com
-          </span>
-          <textarea id="cookie-text" rows="3"
-            placeholder="curl 'https://claude.ai/api/organizations/...' -H 'cookie: sessionKey=sk-ant-sid01-...'"
-            style="width:100%;margin-top:8px;background:var(--bg);color:var(--text);
-                   border:1px solid var(--border2);border-radius:6px;padding:8px;
-                   font-family:monospace;font-size:10px;resize:vertical"></textarea>
-          <button class="btn-secondary" style="margin-top:6px" onclick="importCookies()">
-            Importa cookie
-          </button>
-          <div id="import-result" style="display:none;margin-top:8px;padding:8px;
-               border-radius:6px;font-size:11px;line-height:1.5"></div>
-        </div>
-      </details>
-
       <button class="btn-danger" onclick="doLogout()">
         Cancella sessione locale
       </button>
@@ -606,11 +593,11 @@ body { background: var(--bg); color: var(--text); }
       <div class="field">
         <label>Aggiornamento automatico</label>
         <select id="poll-interval" onchange="savePollInterval()">
-          <option value="30">30 secondi</option>
           <option value="60" selected>1 minuto</option>
           <option value="120">2 minuti</option>
           <option value="300">5 minuti</option>
           <option value="600">10 minuti</option>
+          <option value="1800">30 minuti</option>
         </select>
       </div>
 
@@ -623,6 +610,12 @@ body { background: var(--bg); color: var(--text); }
                   onclick="changeTheme('blue')">Blu</button>
           <button class="theme-btn" data-theme="purple"
                   onclick="changeTheme('purple')">Viola</button>
+          <button class="theme-btn" data-theme="light"
+                  onclick="changeTheme('light')">Chiaro</button>
+          <button class="theme-btn" data-theme="green"
+                  onclick="changeTheme('green')">Verde</button>
+          <button class="theme-btn" data-theme="amber"
+                  onclick="changeTheme('amber')">Ambra</button>
         </div>
       </div>
 
@@ -1080,7 +1073,7 @@ async function loadData() {
 
 function scheduleRefresh(secs) {
   clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(loadData, Math.max(30, secs) * 1000);
+  refreshTimer = setTimeout(loadData, Math.max(60, secs) * 1000);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

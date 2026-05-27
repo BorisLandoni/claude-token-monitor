@@ -123,7 +123,7 @@ def process_account_limits(limits: dict):
 
 async def poll_loop():
     while True:
-        interval = max(30, store.settings.get('poll_interval', 60))
+        interval = max(60, store.settings.get('poll_interval', 60))
         await asyncio.sleep(interval)
         if not client.has_auth():
             continue
@@ -358,7 +358,7 @@ def get_settings():
 @app.put('/api/settings')
 def update_settings(body: SettingsUpdate):
     if body.poll_interval is not None:
-        store.settings['poll_interval'] = max(30, body.poll_interval)
+        store.settings['poll_interval'] = max(60, body.poll_interval)
     if body.theme is not None:
         store.settings['theme'] = body.theme
     store.save()
