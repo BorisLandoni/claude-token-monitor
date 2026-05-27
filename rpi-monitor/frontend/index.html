@@ -397,6 +397,27 @@ body { background: var(--bg); color: var(--text); }
 }
 .info-modal-close:hover { filter:brightness(1.1); }
 
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+#toast {
+  position:fixed; top:64px; left:50%; transform:translateX(-50%);
+  background:var(--surface); border:2px solid var(--green);
+  border-radius:10px; padding:12px 18px; min-width:300px;
+  box-shadow:0 0 30px rgba(0,232,122,.35);
+  display:none; z-index:3000;
+  animation:toastIn .25s ease-out;
+}
+#toast.show { display:block; }
+@keyframes toastIn {
+  from { opacity:0; transform:translateX(-50%) translateY(-10px); }
+  to   { opacity:1; transform:translateX(-50%) translateY(0); }
+}
+.toast-row { display:flex; gap:12px; align-items:center; margin-bottom:8px; }
+.toast-icon { font-size:24px; color:var(--green); }
+.toast-msg-main { font-size:13px; font-weight:700; color:var(--text); }
+.toast-msg-sub  { font-size:11px; color:var(--muted); margin-top:2px; }
+.toast-bar { height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+#toast-bar-fill { height:100%; width:100%; background:var(--green); }
+
 /* ── Login Modal ─────────────────────────────────────────────────────────── */
 #login-modal {
   position:fixed; inset:0; z-index:2000;
@@ -741,6 +762,18 @@ curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/c
   <div class="alert-icon">⚠</div>
   <div class="alert-title">SESSIONE QUASI ESAURITA</div>
   <div class="alert-body">Meno del 10% rimasto · Tocca per chiudere</div>
+</div>
+
+<!-- ── Toast Aggiornamento ────────────────────────────────────────────────── -->
+<div id="toast">
+  <div class="toast-row">
+    <div class="toast-icon">✓</div>
+    <div>
+      <div class="toast-msg-main">Aggiornamento completato!</div>
+      <div class="toast-msg-sub">Ricarico tra <span id="toast-secs">5</span>s…</div>
+    </div>
+  </div>
+  <div class="toast-bar"><div id="toast-bar-fill"></div></div>
 </div>
 
 <!-- ── Login Modal ────────────────────────────────────────────────────────── -->
@@ -1505,7 +1538,10 @@ async function checkForUpdate() {
       status.style.border = '1px solid var(--amber)';
       status.style.color = 'var(--amber)';
       status.textContent = `⬆ Nuova versione: v${d.latest}  (attuale: v${d.current})`;
+      updateBtn.textContent = '↑ Aggiorna Adesso';
+      updateBtn.disabled = false;
       updateBtn.style.display = '';
+      document.getElementById('update-log').style.display = 'none';
     } else if (d.up_to_date) {
       status.style.background = 'rgba(0,232,122,.1)';
       status.style.border = '1px solid var(--green)';
@@ -1528,7 +1564,7 @@ let _updateInProgress = false;
 async function runUpdate() {
   const btn   = document.getElementById('update-btn');
   const logEl = document.getElementById('update-log');
-  btn.disabled = true; btn.textContent = 'Aggiornamento…';
+  btn.disabled = true; btn.textContent = '⟳ Aggiornamento…';
   logEl.style.display = ''; logEl.textContent = 'Avvio…\n';
   _updateInProgress = false;
   try {
@@ -1561,31 +1597,50 @@ async function _pollUpdateLog() {
       _updateInProgress = false;
       btn.disabled = false;
       const ok = data.log.includes('[✓] Servizio riavviato');
-      btn.textContent = ok ? '✓ Aggiornato!' : '↑ Riprova';
       if (ok) {
-        status.style.background = 'rgba(0,232,122,.1)';
-        status.style.border = '1px solid var(--green)';
-        status.style.color = 'var(--green)';
-        status.textContent = '✓ Aggiornamento completato — ricarico tra 5s…';
-        setTimeout(() => location.reload(), 5000);
+        btn.textContent = '✓ Aggiornato!';
+        status.style.display = 'none';
+        showUpdateToast();
+      } else {
+        btn.textContent = '↑ Riprova';
       }
     }
   } catch(e) {
-    // Il server si è riavviato durante l'aggiornamento → ricarica pagina
+    // Il server si è riavviato durante l'aggiornamento → mostra toast + reload
     if (_updateInProgress) {
       clearInterval(_updatePollTimer); _updatePollTimer = null;
       _updateInProgress = false;
       const status = document.getElementById('update-status');
-      if (status) {
-        status.style.display = '';
-        status.style.background = 'rgba(0,232,122,.1)';
-        status.style.border = '1px solid var(--green)';
-        status.style.color = 'var(--green)';
-        status.textContent = '✓ Servizio riavviato — ricarico tra 3s…';
-      }
-      setTimeout(() => location.reload(), 3000);
+      if (status) status.style.display = 'none';
+      showUpdateToast();
     }
   }
+}
+
+function showUpdateToast() {
+  const t      = document.getElementById('toast');
+  const bar    = document.getElementById('toast-bar-fill');
+  const secsEl = document.getElementById('toast-secs');
+  const TOTAL  = 5;
+  t.classList.add('show');
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+  // forza reflow poi avvia la transizione
+  void bar.offsetWidth;
+  bar.style.transition = `width ${TOTAL}s linear`;
+  bar.style.width = '0%';
+  let secs = TOTAL;
+  secsEl.textContent = secs;
+  const tick = setInterval(() => {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(tick);
+      // hard reload con cache bypass
+      window.location.href = '/?t=' + Date.now();
+    } else {
+      secsEl.textContent = secs;
+    }
+  }, 1000);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

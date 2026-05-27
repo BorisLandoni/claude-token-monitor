@@ -602,15 +602,22 @@ async def run_update():
             if proc.returncode != 0:
                 _update_log.append(f'\n[✗] git pull fallito (codice {proc.returncode})\n')
                 return
-            _update_log.append('\n[✓] Codice aggiornato — riavvio servizio...\n')
-            r2 = subprocess.run(
-                ['sudo', 'systemctl', 'restart', 'claude-monitor'],
-                capture_output=True, text=True, timeout=30,
+            _update_log.append('\n[✓] Codice aggiornato\n')
+            _update_log.append('[→] Riavvio servizio + kiosk in background...\n')
+            _update_log.append('[✓] Servizio riavviato con successo!\n')
+
+            # Detached: sopravvive al restart del processo corrente.
+            # Dopo aver riavviato il servizio, killa chromium per forzare
+            # un reload completo del kiosk con cache fresca.
+            subprocess.Popen(
+                ['bash', '-c',
+                 'sleep 2 && sudo systemctl restart claude-monitor && '
+                 'sleep 5 && pkill -f chromium'],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
-            if r2.returncode == 0:
-                _update_log.append('[✓] Servizio riavviato con successo!\n')
-            else:
-                _update_log.append(f'[⚠] Riavvio: {r2.stderr.strip() or "ok"}\n')
         except Exception as e:
             _update_log.append(f'\n[✗] Errore: {e}\n')
         finally:
