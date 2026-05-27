@@ -689,37 +689,6 @@ body { background: var(--bg); color: var(--text); }
         <strong id="server-url">http://raspberrypi.local:8080</strong>
       </div>
 
-      <!-- Setup RPi -->
-      <details id="setup-details">
-        <summary class="expand-toggle">
-          <span class="et-title">▶ Setup Raspberry Pi</span>
-          <span id="setup-avail-tag" style="color:var(--muted2)">caricamento…</span>
-        </summary>
-        <div class="expand-panel" style="line-height:1.7">
-          <b style="color:var(--text)">Cosa fa il setup:</b><br>
-          <span style="color:var(--green)">1.</span> Installa Node.js e <b>Claude Code</b><br>
-          <span style="color:var(--green)">2.</span> Installa Python, Playwright, dipendenze<br>
-          <span style="color:var(--green)">3.</span> Crea servizio systemd (avvio automatico)<br>
-          <span style="color:var(--green)">4.</span> Configura Chromium in modalità kiosk<br><br>
-          <b style="color:var(--cyan)">Comando SSH:</b><br>
-          <code id="setup-cmd"
-            style="font-size:9.5px;word-break:break-all;background:var(--bg);
-                   display:block;padding:5px 6px;border-radius:4px;
-                   border:1px solid var(--border2);margin:4px 0;cursor:pointer"
-            onclick="copySetupCmd()" title="Clicca per copiare">
-curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/claude/rpi-token-monitor/setup-rpi.sh | bash
-          </code>
-          <div id="copy-confirm" style="font-size:10px;color:var(--green);display:none">
-            ✓ Copiato
-          </div>
-          <div id="setup-log"></div>
-          <button id="setup-btn" class="btn-primary" style="margin-top:8px"
-                  onclick="runSetupRpi()">
-            ▶ Esegui Setup su questo dispositivo
-          </button>
-        </div>
-      </details>
-
       <!-- Controllo Kiosk -->
       <button id="kiosk-exit-btn" class="btn-secondary"
               onclick="exitKiosk()" title="Chiude il browser kiosk per accedere al desktop">
@@ -874,7 +843,6 @@ let hourlyData     = [];
 let sessionHistory = [];
 let alertShownAt   = 0;
 let alertDismissTs = 0;
-let setupPollTimer = null;
 let lastLoadTs     = Date.now();
 let pollIntervalMs = 60_000;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
@@ -1341,80 +1309,6 @@ function renderSettings() {
     btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'blue')));
   const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
   setText('server-url', base);
-  refreshSetupStatus();
-}
-
-/* ════════════════════════════════════════════════════════════════════════════
-   SETUP RPi
-   ════════════════════════════════════════════════════════════════════════ */
-async function refreshSetupStatus() {
-  try {
-    const data = await fetch('/api/setup-rpi/log').then(r => r.json());
-    const tag  = document.getElementById('setup-avail-tag');
-    const btn  = document.getElementById('setup-btn');
-    if (data.available) {
-      tag.textContent = '● disponibile'; tag.style.color = 'var(--green)';
-      btn.style.display = '';
-    } else {
-      tag.textContent = '○ solo via SSH'; tag.style.color = 'var(--muted2)';
-      btn.style.display = 'none';
-    }
-    if (data.running) {
-      btn.disabled = true; btn.textContent = 'Setup in corso…';
-      updateSetupLog(data);
-      if (!setupPollTimer) setupPollTimer = setInterval(pollSetupLog, 2000);
-    }
-  } catch(e) {}
-}
-
-async function runSetupRpi() {
-  const btn  = document.getElementById('setup-btn');
-  const logEl= document.getElementById('setup-log');
-  btn.disabled = true; btn.textContent = 'Avvio setup…';
-  logEl.style.display = ''; logEl.textContent = 'Avvio in corso…\n';
-  try {
-    const res  = await fetch('/api/setup-rpi', { method:'POST' });
-    const data = await res.json();
-    if (!data.ok) {
-      logEl.textContent = '✗ ' + data.reason;
-      btn.disabled = false; btn.textContent = '▶ Esegui Setup';
-      return;
-    }
-    setupPollTimer = setInterval(pollSetupLog, 2000);
-    pollSetupLog();
-  } catch(e) {
-    logEl.textContent = '✗ ' + e.message;
-    btn.disabled = false; btn.textContent = '▶ Esegui Setup';
-  }
-}
-
-async function pollSetupLog() {
-  try {
-    const data = await fetch('/api/setup-rpi/log').then(r => r.json());
-    updateSetupLog(data);
-    if (!data.running) {
-      clearInterval(setupPollTimer); setupPollTimer = null;
-      const btn = document.getElementById('setup-btn');
-      btn.disabled = false; btn.textContent = '↺ Ri-esegui Setup';
-      await loadData();
-    }
-  } catch(e) {}
-}
-
-function updateSetupLog(data) {
-  const logEl = document.getElementById('setup-log');
-  if (!logEl) return;
-  logEl.style.display = '';
-  logEl.textContent = (data.log || '').replace(/\x1b\[[0-9;]*m/g, '');
-  logEl.scrollTop = logEl.scrollHeight;
-}
-
-function copySetupCmd() {
-  const cmd = 'curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/claude/rpi-token-monitor/setup-rpi.sh | bash';
-  navigator.clipboard.writeText(cmd).then(() => {
-    const el = document.getElementById('copy-confirm');
-    if (el) { el.style.display = ''; setTimeout(() => el.style.display = 'none', 2500); }
-  }).catch(() => {});
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1659,18 +1553,20 @@ async function startClaudeLogin() {
   try {
     const res  = await fetch('/api/login/start', { method: 'POST' });
     const data = await res.json();
+    if (data.status === 'success') {
+      _onLoginSuccess();
+      return;
+    }
     if (data.url) {
       _showLoginQr(data.url);
-    } else {
+    } else if (data.status === 'error') {
       document.getElementById('login-modal-status').style.color = 'var(--red)';
       document.getElementById('login-modal-status').textContent =
-        '✗ Impossibile ottenere il link di login.\nUsa SSH: claude login';
+        '✗ Impossibile avviare claude login.\nUsa SSH: claude login';
+      return;
     }
-    if (data.status !== 'success') {
-      _loginPollTimer = setInterval(_pollLoginStatus, 2000);
-    } else {
-      _onLoginSuccess();
-    }
+    // status è 'starting' o 'waiting': continua a fare polling
+    _loginPollTimer = setInterval(_pollLoginStatus, 2000);
   } catch(e) {
     document.getElementById('login-modal-status').style.color = 'var(--red)';
     document.getElementById('login-modal-status').textContent = '✗ Errore: ' + e.message;
@@ -1701,6 +1597,9 @@ async function _pollLoginStatus() {
       document.getElementById('login-modal-status').style.color = 'var(--red)';
       document.getElementById('login-modal-status').textContent =
         '✗ Autenticazione fallita. Riprova.';
+    } else if (data.url && !document.getElementById('login-url-text').textContent) {
+      // URL arrivato durante il polling (RPi lento): mostra il QR ora
+      _showLoginQr(data.url);
     }
   } catch(e) {}
 }

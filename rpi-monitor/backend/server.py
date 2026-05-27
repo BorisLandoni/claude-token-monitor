@@ -347,73 +347,6 @@ def health():
 
 # ── Setup RPi ─────────────────────────────────────────────────────────────────
 
-_setup_log: list = []
-_setup_running: bool = False
-
-
-def _find_setup_script() -> Optional[Path]:
-    candidates = [
-        Path.home() / 'claude-token-monitor' / 'setup-rpi.sh',
-        Path(__file__).parent.parent.parent / 'setup-rpi.sh',
-        Path(__file__).parent.parent / 'setup-rpi.sh',
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return None
-
-
-@app.post('/api/setup-rpi')
-async def run_setup_rpi():
-    global _setup_running, _setup_log
-    if _setup_running:
-        return {'ok': False, 'reason': 'Setup già in corso'}
-
-    script = _find_setup_script()
-    if not script:
-        return {'ok': False, 'reason': 'Script setup-rpi.sh non trovato sul dispositivo'}
-
-    _setup_log = [f'Avvio da: {script}\n\n']
-    _setup_running = True
-
-    def _run():
-        global _setup_running
-        try:
-            env = os.environ.copy()
-            env['NON_INTERACTIVE'] = '1'
-            proc = subprocess.Popen(
-                ['bash', str(script)],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True, bufsize=1,
-                env=env,
-            )
-            for line in proc.stdout:
-                _setup_log.append(line)
-            proc.wait()
-            rc = proc.returncode
-            _setup_log.append(
-                f'\n{"[✓] Setup completato con successo!" if rc == 0 else f"[✗] Errore (codice {rc})"}\n'
-            )
-        except Exception as e:
-            _setup_log.append(f'\n[✗] Errore: {e}\n')
-        finally:
-            _setup_running = False
-
-    threading.Thread(target=_run, daemon=True).start()
-    return {'ok': True}
-
-
-@app.get('/api/setup-rpi/log')
-def get_setup_log():
-    return {
-        'running': _setup_running,
-        'log': ''.join(_setup_log),
-        'available': _find_setup_script() is not None,
-    }
-
-
 # ── Claude Login (kiosk) ─────────────────────────────────────────────────────
 
 _login_url:    Optional[str] = None
@@ -472,8 +405,8 @@ async def start_claude_login():
             _login_proc = None
 
     threading.Thread(target=_run, daemon=True).start()
-    # Aspetta fino a 5s che appaia l'URL
-    for _ in range(10):
+    # Aspetta fino a 20s che appaia l'URL (RPi 3B+ è lento ad avviare claude)
+    for _ in range(40):
         await asyncio.sleep(0.5)
         if _login_url or _login_status == 'error':
             break
