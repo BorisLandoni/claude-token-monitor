@@ -533,8 +533,10 @@ def get_version():
 async def check_version():
     current = _get_current_version()
     try:
+        # ?ts= bypassa la cache CDN di raw.githubusercontent.com
+        url = f'{GITHUB_VERSION_URL}?ts={int(time.time())}'
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(GITHUB_VERSION_URL)
+            r = await c.get(url, headers={'Cache-Control': 'no-cache'})
         latest = r.text.strip() if r.status_code == 200 else None
     except Exception:
         latest = None
