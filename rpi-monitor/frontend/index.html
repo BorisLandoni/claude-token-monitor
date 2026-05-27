@@ -699,6 +699,12 @@ curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/c
         </div>
       </details>
 
+      <!-- Controllo Kiosk -->
+      <button id="kiosk-exit-btn" class="btn-secondary"
+              onclick="exitKiosk()" title="Chiude il browser kiosk per accedere al desktop">
+        ⊞ &nbsp;Esci dal Kiosk
+      </button>
+
       <!-- Info button -->
       <button class="btn-info" onclick="openInfo()" style="margin-top:auto">
         ℹ &nbsp;Info &amp; Sviluppatore
@@ -1331,10 +1337,8 @@ async function refreshSetupStatus() {
 async function runSetupRpi() {
   const btn  = document.getElementById('setup-btn');
   const logEl= document.getElementById('setup-log');
-  const hint = document.getElementById('setup-login-hint');
   btn.disabled = true; btn.textContent = 'Avvio setup…';
   logEl.style.display = ''; logEl.textContent = 'Avvio in corso…\n';
-  hint.style.display = 'none';
   try {
     const res  = await fetch('/api/setup-rpi', { method:'POST' });
     const data = await res.json();
@@ -1359,9 +1363,6 @@ async function pollSetupLog() {
       clearInterval(setupPollTimer); setupPollTimer = null;
       const btn = document.getElementById('setup-btn');
       btn.disabled = false; btn.textContent = '↺ Ri-esegui Setup';
-      if (data.log.includes('Credenziali non trovate')) {
-        document.getElementById('setup-login-hint').style.display = '';
-      }
       await loadData();
     }
   } catch(e) {}
@@ -1421,62 +1422,11 @@ async function doLogout() {
   await loadData();
 }
 
-async function importCookies() {
-  const ta     = document.getElementById('cookie-text');
-  const result = document.getElementById('import-result');
-  const text   = (ta.value || '').trim();
-
-  if (!text) {
-    showImportResult(false, 'Incolla prima il comando cURL copiato da Chrome.');
-    return;
-  }
-  // Avviso rapido se si vede assets-proxy
-  if (text.includes('assets-proxy.anthropic.com') || !text.includes('claude.ai')) {
-    showImportResult(false,
-      '✗ Richiesta sbagliata — contiene assets-proxy, non claude.ai.\n' +
-      'Filtra Network per "organizations" e copia quella richiesta.');
-    return;
-  }
-  if (!text.includes('sessionKey') && !text.includes('cookie')) {
-    showImportResult(false,
-      '✗ Nessun cookie trovato nel testo.\n' +
-      'Assicurati di copiare una richiesta autenticata (deve contenere sessionKey=…).');
-    return;
-  }
-
-  showImportResult(null, '⟳ Importazione in corso…');
-  showOverlay('Importazione cookie e prima sincronizzazione…\n(circa 20-40 secondi)');
+async function exitKiosk() {
+  if (!confirm('Chiudere il kiosk e tornare al desktop?\nIl monitor continua a girare in background.')) return;
   try {
-    const res  = await fetch('/api/import-cookies', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ text }),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      ta.value = '';
-      showImportResult(true, `✓ ${data.message}\nI dati Design e Routine appariranno nella pagina ADESSO.`);
-      await loadData();
-    } else {
-      showImportResult(false, `✗ ${data.message}`);
-    }
-  } catch(e) {
-    showImportResult(false, `✗ Errore di rete: ${e.message}`);
-  } finally { hideOverlay(); }
-}
-
-function showImportResult(ok, msg) {
-  const el = document.getElementById('import-result');
-  if (!el) return;
-  el.style.display    = '';
-  el.style.background = ok === true  ? 'rgba(0,232,122,.1)'  :
-                        ok === false ? 'rgba(255,68,85,.1)'   :
-                        'var(--surface2)';
-  el.style.border     = `1px solid ${ok === true ? 'var(--green)' : ok === false ? 'var(--red)' : 'var(--border)'}`;
-  el.style.color      = ok === true  ? 'var(--green)'  :
-                        ok === false ? 'var(--red)'    :
-                        'var(--muted)';
-  el.style.whiteSpace = 'pre-wrap';
-  el.textContent = msg;
+    await fetch('/api/kiosk/exit', { method:'POST' });
+  } catch(e) {}
 }
 
 async function forcePoll() {

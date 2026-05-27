@@ -274,26 +274,7 @@ def get_account_history():
     return store.get_session_history()
 
 
-# ── Login / session ───────────────────────────────────────────────────────────
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-@app.post('/api/login')
-async def login(body: LoginRequest):
-    store.settings['email'] = body.email
-    store.save()
-
-    success, message = await client.login_playwright(body.email, body.password)
-    if success:
-        limits = await client.poll_limits()
-        if limits and not limits.get('_error'):
-            process_account_limits(limits)
-
-    return {'ok': success, 'message': message}
-
+# ── Session ───────────────────────────────────────────────────────────────────
 
 @app.get('/api/session')
 def get_session():
@@ -318,23 +299,6 @@ async def force_poll():
         return {'ok': True, 'account': store.account, **result}
     except Exception as e:
         return {'ok': False, 'reason': str(e)}
-
-
-class ImportCookies(BaseModel):
-    text: str
-
-
-@app.post('/api/import-cookies')
-async def import_cookies(body: ImportCookies):
-    """Importa cookie da Chrome (cURL, raw string, JSON Playwright)."""
-    n, msg = client.import_cookies_from_text(body.text)
-    if n == 0:
-        return {'ok': False, 'message': msg}
-    try:
-        await do_poll()
-    except Exception as e:
-        print(f'[import] poll dopo import: {e}')
-    return {'ok': True, 'message': msg, 'count': n}
 
 
 @app.post('/api/logout')
@@ -541,6 +505,41 @@ def restart_service():
         time.sleep(1)
         subprocess.run(['sudo', 'systemctl', 'restart', 'claude-monitor'], timeout=30)
     threading.Thread(target=_do, daemon=True).start()
+    return {'ok': True}
+
+
+# ── Kiosk control ─────────────────────────────────────────────────────────────
+
+@app.post('/api/kiosk/exit')
+def kiosk_exit():
+    """Termina wrapper start-kiosk.sh e chromium — torna al desktop."""
+    try:
+        subprocess.run(['pkill', '-f', 'start-kiosk.sh'], timeout=5)
+    except Exception as e:
+        print(f'[kiosk] pkill wrapper: {e}')
+    try:
+        subprocess.run(['pkill', '-f', 'chromium'], timeout=5)
+    except Exception as e:
+        print(f'[kiosk] pkill chromium: {e}')
+    return {'ok': True}
+
+
+@app.post('/api/kiosk/start')
+def kiosk_start():
+    """Rilancia il kiosk se è stato chiuso."""
+    script = Path.home() / 'claude-token-monitor' / 'start-kiosk.sh'
+    if not script.exists():
+        return {'ok': False, 'reason': 'Script start-kiosk.sh non trovato'}
+    try:
+        subprocess.Popen(
+            ['bash', str(script)],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as e:
+        return {'ok': False, 'reason': str(e)}
     return {'ok': True}
 
 
