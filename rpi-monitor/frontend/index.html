@@ -832,8 +832,10 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
     safe(() => renderTimeline());
     safe(() => renderRefreshBar());
   }
-  tick();
+  // setInterval va registrato PRIMA del tick iniziale: se quello lancia
+  // (improbabile col safe-wrap, ma per principio) l'orologio deve comunque partire.
   setInterval(tick, 1000);
+  try { tick(); } catch(e) { console.error('startClock:initial', e); }
 })();
 
 function renderCountdown(now) {
@@ -941,9 +943,15 @@ function drawSparkline() {
   const cBorder = style.getPropertyValue('--border').trim();
   const cSurf2  = style.getPropertyValue('--surface2').trim();
 
-  // Sfondo
+  // Sfondo (con fallback se roundRect non è supportato)
   ctx.fillStyle = cSurf2 + '40';
-  ctx.beginPath(); ctx.roundRect(0, 0, W, H, 6); ctx.fill();
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(0, 0, W, H, 6);
+  } else {
+    ctx.rect(0, 0, W, H);
+  }
+  ctx.fill();
 
   // Margini: top per % label, bottom per ora label
   const PAD_TOP = 10;
@@ -1124,6 +1132,7 @@ function closeInfoOutside(e) {
    DATA LOADING
    ════════════════════════════════════════════════════════════════════════ */
 async function loadData() {
+  let okFetch = false;
   try {
     const [account, settings, session, history] = await Promise.all([
       fetch('/api/account').then(r => r.json()),
@@ -1131,6 +1140,7 @@ async function loadData() {
       fetch('/api/session').then(r => r.json()),
       fetch('/api/account/history').then(r => r.json()).catch(() => []),
     ]);
+    okFetch = true;
     DATA = { account, settings, session };
     sessionHistory = Array.isArray(history) ? history : [];
     // Preserva l'ultimo timestamp conosciuto: a sessione 100% l'API spesso non lo restituisce
@@ -1142,22 +1152,24 @@ async function loadData() {
       sessionResetTs = Math.floor(Date.now() / 1000) + 5 * 3600;
     }
     pollIntervalMs = (settings.poll_interval || 60) * 1000;
-    lastLoadTs     = Date.now();
-    applyTheme(settings.theme || 'blue');
-    render();
-    drawSparkline();
-    renderRefreshBar();
-    scheduleRefresh(settings.poll_interval || 60);
   } catch (e) {
-    console.error('loadData:', e);
+    console.error('loadData:fetch', e);
   }
+  // Reset SEMPRE la barra refresh, anche in caso di errore parziale
+  lastLoadTs = Date.now();
+  // Ogni rendering è protetto: un errore in uno non deve bloccare gli altri
+  try { applyTheme((DATA.settings||{}).theme || 'blue'); } catch(e){ console.error('applyTheme', e); }
+  try { render(); } catch(e){ console.error('render', e); }
+  try { drawSparkline(); } catch(e){ console.error('drawSparkline', e); }
+  try { renderRefreshBar(); } catch(e){ console.error('renderRefreshBar', e); }
+  return okFetch;
 }
 
-function scheduleRefresh(secs) {
-  clearTimeout(refreshTimer);
-  // Il display si aggiorna sempre ogni 60s (indipendente dall'intervallo di polling).
-  // Il backend fa il poll ogni 'secs' secondi, ma l'UI mostra comunque dati freschi.
-  refreshTimer = setTimeout(loadData, 60_000);
+// Display refresh timer: setInterval unico, indipendente da qualsiasi errore.
+// Parte al boot e non viene mai stoppato.
+function scheduleRefresh(_secs) {
+  if (refreshTimer) return;  // già attivo
+  refreshTimer = setInterval(loadData, DISPLAY_REFRESH_MS);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1428,7 +1440,7 @@ async function savePollInterval() {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ poll_interval: v }),
   });
-  scheduleRefresh(v);
+  // L'intervallo di refresh del display è già attivo (60s fisso)
 }
 
 async function changeTheme(theme) {
@@ -1679,6 +1691,8 @@ function closeLoginModal() {
 go('now');
 loadData();
 loadVersionInfo();
+// Pianifica il refresh ogni 60s indipendentemente dal primo loadData
+scheduleRefresh();
 </script>
 </body>
 </html>
