@@ -265,39 +265,73 @@ AUTOSTART_DIR="$HOME/.config/autostart"
 AUTOSTART_FILE="$AUTOSTART_DIR/claude-monitor-kiosk.desktop"
 KIOSK_SCRIPT="$INSTALL_DIR/start-kiosk.sh"
 
-# Script wrapper con: log di debug, health check, loop di restart.
-# DISPLAY/WAYLAND_DISPLAY sono ereditati dalla sessione desktop —
-# NON va impostato DISPLAY=:0 perché su Wayland (Bookworm default) non esiste.
-cat > "$KIOSK_SCRIPT" <<EOF
+# Script wrapper con: log di debug, Wayland/X11 auto-detect, health check, loop restart.
+# Su Bookworm (labwc/Wayland) l'autostart non propaga sempre le env vars del display;
+# lo script le ricava dal socket Wayland nel runtime dir.
+cat > "$KIOSK_SCRIPT" <<'KIOSK_EOF'
 #!/usr/bin/env bash
-# Log per diagnostica
-exec >> "\$HOME/kiosk.log" 2>&1
-echo "[\$(date '+%F %T')] === Kiosk start ==="
-echo "  USER=\$USER  HOME=\$HOME  DISPLAY=\${DISPLAY:-?}  WAYLAND_DISPLAY=\${WAYLAND_DISPLAY:-?}"
-echo "  XDG_SESSION_TYPE=\${XDG_SESSION_TYPE:-?}"
+exec >> "$HOME/kiosk.log" 2>&1
+echo "[$(date '+%F %T')] === Kiosk start ==="
 
-# Attendi che il backend risponda (max 60s)
-for i in \$(seq 1 60); do
-    if curl -fsS http://localhost:$PORT/health >/dev/null 2>&1; then
-        echo "[\$(date '+%F %T')] Backend pronto dopo \${i}s"
-        break
+# ── Rilevamento display (Wayland o X11) ──────────────────────────────────────
+# XDG_RUNTIME_DIR è indispensabile per Wayland; default a /run/user/<uid>
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+# Se nessuna variabile display è già presente, cerca il socket Wayland
+if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -z "${DISPLAY:-}" ]; then
+    if   [ -S "$XDG_RUNTIME_DIR/wayland-1" ]; then export WAYLAND_DISPLAY=wayland-1
+    elif [ -S "$XDG_RUNTIME_DIR/wayland-0" ]; then export WAYLAND_DISPLAY=wayland-0
+    else
+        export DISPLAY=:0   # fallback X11/XWayland
+        export XAUTHORITY="$HOME/.Xauthority"
     fi
+fi
+
+echo "  USER=$USER  HOME=$HOME  DISPLAY=${DISPLAY:-?}  WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-?}"
+echo "  XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-?}  XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-?}"
+
+# Scegli i flag ozone in base alla sessione rilevata
+if [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    OZONE="--ozone-platform=wayland --enable-features=UseOzonePlatform"
+else
+    OZONE="--ozone-platform=x11"
+fi
+
+# Individua il browser disponibile
+BROWSER_BIN=""
+for b in chromium chromium-browser; do
+    if command -v "$b" &>/dev/null; then BROWSER_BIN="$b"; break; fi
+done
+if [ -z "$BROWSER_BIN" ]; then
+    echo "[$(date '+%F %T')] ERRORE: chromium non trovato"
+    exit 1
+fi
+
+# Attendi che il backend risponda (max 90s)
+BACKEND_URL="PLACEHOLDER_PORT"
+for i in $(seq 1 90); do
+    curl -fsS "http://localhost:${BACKEND_URL}/health" >/dev/null 2>&1 && {
+        echo "[$(date '+%F %T')] Backend pronto dopo ${i}s"; break; }
     sleep 1
 done
 
-# Loop infinito: se chromium esce/crash, riparte dopo 3s
+# Loop infinito: se chromium esce/crasha, riparte dopo 3s
 while true; do
-    echo "[\$(date '+%F %T')] Lancio $BROWSER_BIN"
-    $BROWSER_BIN \\
-        --kiosk --noerrdialogs --disable-infobars \\
-        --no-first-run --disable-session-crashed-bubble \\
-        --disable-translate --overscroll-history-navigation=0 \\
-        --window-size=800,480 \\
-        http://localhost:$PORT
-    echo "[\$(date '+%F %T')] Browser uscito (\$?), riavvio in 3s"
+    echo "[$(date '+%F %T')] Lancio $BROWSER_BIN  ozone=$OZONE"
+    # shellcheck disable=SC2086
+    "$BROWSER_BIN" $OZONE \
+        --kiosk --noerrdialogs --disable-infobars \
+        --no-first-run --disable-session-crashed-bubble \
+        --disable-translate --overscroll-history-navigation=0 \
+        --window-size=800,480 \
+        "http://localhost:${BACKEND_URL}"
+    echo "[$(date '+%F %T')] Browser uscito ($?), riavvio in 3s"
     sleep 3
 done
-EOF
+KIOSK_EOF
+
+# Sostituisce il placeholder con la porta reale
+sed -i "s|PLACEHOLDER_PORT|$PORT|g" "$KIOSK_SCRIPT"
 chmod +x "$KIOSK_SCRIPT"
 
 mkdir -p "$AUTOSTART_DIR"
