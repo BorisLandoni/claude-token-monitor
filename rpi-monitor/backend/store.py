@@ -60,8 +60,8 @@ def add_sample(session_pct_used: float) -> None:
     """Registra un campione di utilizzo sessione per la sparkline storica."""
     global samples
     now_ts = int(time.time())
-    # Al massimo un punto ogni 5 minuti (evita duplicati su poll rapidi)
-    if samples and (now_ts - samples[-1]['ts']) < 300:
+    # Deduplicazione a 55s: ogni poll OAuth (min 58s) produce un punto distinto
+    if samples and (now_ts - samples[-1]['ts']) < 55:
         samples[-1] = {'ts': now_ts, 'pct': round(session_pct_used, 1)}
     else:
         samples.append({'ts': now_ts, 'pct': round(session_pct_used, 1)})

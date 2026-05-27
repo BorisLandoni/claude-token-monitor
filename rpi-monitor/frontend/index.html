@@ -961,7 +961,7 @@ function drawSparkline() {
   ctx.lineWidth   = 1;
   ctx.beginPath(); ctx.moveTo(0, H - 0.5); ctx.lineTo(W, H - 0.5); ctx.stroke();
 
-  const pts = sessionHistory.slice(-96);  // max 96 punti (8 ore a 5min)
+  const pts = sessionHistory.slice(-288);  // max 288 punti (~24h a 5min, ~4.8h a 1min)
 
   if (pts.length === 0) {
     ctx.fillStyle    = cMuted;
