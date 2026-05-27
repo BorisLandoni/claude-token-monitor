@@ -1232,27 +1232,36 @@ function renderSettings() {
   // Auth status
   const el    = document.getElementById('login-status');
   const lines = [];
+  const oauthExpired = s.oauth_available && acc.session_status === 'oauth_expired';
   if (s.oauth_available) {
-    if (acc.session_status === 'oauth_expired') {
-      lines.push('<span class="s-err">⚠ OAuth scaduto — esegui <code>claude login</code></span>');
+    if (oauthExpired) {
+      lines.push(
+        '<span class="s-err">⚠ Token OAuth scaduto</span><br>' +
+        '<span style="font-size:10px;color:var(--muted);line-height:1.8">' +
+        'Apri un terminale sul Raspberry e digita:<br>' +
+        '<code style="color:var(--cyan);font-size:11px">claude login</code><br>' +
+        'Poi riavvia il servizio:<br>' +
+        '<code style="color:var(--cyan);font-size:11px">sudo systemctl restart claude-monitor</code>' +
+        '</span>'
+      );
     } else {
       lines.push('<span class="s-ok">● OAuth Claude Code: attivo</span>');
     }
   } else {
-    lines.push('<span class="s-err">✗ Claude Code non trovato</span>' +
-      '<br><small style="opacity:.7">Installa Claude Code ed esegui <code>claude login</code></small>');
-  }
-  if (s.cookies_available) {
-    const age = s.cookie_age_hours ? ` (${s.cookie_age_hours}h fa)` : '';
-    lines.push(`<span class="s-ok">● Cookie sessionKey importati${age}</span>`);
-  } else {
-    lines.push('<span class="s-inf">○ Cookie: non importati — opzionale</span>');
+    lines.push(
+      '<span class="s-err">✗ Claude Code non trovato</span><br>' +
+      '<small style="opacity:.7">Installa Claude Code ed esegui <code>claude login</code></small>'
+    );
   }
   el.innerHTML = lines.join('<br>');
 
+  // Nascondi "Aggiorna Adesso" se OAuth scaduto — non serve a nulla
+  const pollBtn = document.getElementById('poll-btn');
+  if (pollBtn) pollBtn.style.display = oauthExpired ? 'none' : '';
+
   document.getElementById('poll-interval').value = String(cfg.poll_interval || 60);
   document.querySelectorAll('.theme-btn').forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'dark')));
+    btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'blue')));
   const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
   setText('server-url', base);
   refreshSetupStatus();
@@ -1525,12 +1534,14 @@ async function checkForUpdate() {
 }
 
 let _updatePollTimer = null;
+let _updateInProgress = false;
 
 async function runUpdate() {
   const btn   = document.getElementById('update-btn');
   const logEl = document.getElementById('update-log');
   btn.disabled = true; btn.textContent = 'Aggiornamento…';
   logEl.style.display = ''; logEl.textContent = 'Avvio…\n';
+  _updateInProgress = false;
   try {
     const res  = await fetch('/api/update', { method: 'POST' });
     const data = await res.json();
@@ -1539,6 +1550,7 @@ async function runUpdate() {
       btn.disabled = false; btn.textContent = '↑ Aggiorna Adesso';
       return;
     }
+    _updateInProgress = true;
     _updatePollTimer = setInterval(_pollUpdateLog, 1500);
     _pollUpdateLog();
   } catch(e) {
@@ -1557,6 +1569,7 @@ async function _pollUpdateLog() {
     logEl.scrollTop = logEl.scrollHeight;
     if (!data.running) {
       clearInterval(_updatePollTimer); _updatePollTimer = null;
+      _updateInProgress = false;
       btn.disabled = false;
       const ok = data.log.includes('[✓] Servizio riavviato');
       btn.textContent = ok ? '✓ Aggiornato!' : '↑ Riprova';
@@ -1568,7 +1581,22 @@ async function _pollUpdateLog() {
         setTimeout(() => location.reload(), 5000);
       }
     }
-  } catch(e) {}
+  } catch(e) {
+    // Il server si è riavviato durante l'aggiornamento → ricarica pagina
+    if (_updateInProgress) {
+      clearInterval(_updatePollTimer); _updatePollTimer = null;
+      _updateInProgress = false;
+      const status = document.getElementById('update-status');
+      if (status) {
+        status.style.display = '';
+        status.style.background = 'rgba(0,232,122,.1)';
+        status.style.border = '1px solid var(--green)';
+        status.style.color = 'var(--green)';
+        status.textContent = '✓ Servizio riavviato — ricarico tra 3s…';
+      }
+      setTimeout(() => location.reload(), 3000);
+    }
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
