@@ -143,14 +143,17 @@ body { background: var(--bg); color: var(--text); }
 /* ── Right: sparkline big + extras + button + footer ──────────────────────── */
 .now-right {
   flex:1; display:flex; flex-direction:column;
-  padding:10px 14px; gap:8px; overflow-y:auto;
+  padding:10px 14px; gap:8px; overflow:hidden;
 }
 
-.sparkline-big-section { flex-shrink:0; }
+.sparkline-big-section {
+  flex:1; display:flex; flex-direction:column;
+  min-height:80px; overflow:hidden;
+}
 .sp-label { font-size:10px; font-weight:700; letter-spacing:2px;
-            color:var(--muted); margin-bottom:4px; }
+            color:var(--muted); margin-bottom:4px; flex-shrink:0; }
 #sparkline {
-  display:block; width:100%; height:140px;
+  display:block; width:100%; flex:1; min-height:80px;
   border-radius:6px;
 }
 
@@ -807,15 +810,17 @@ function setGauge(pctUsed, colorVar) {
   const color   = getComputedStyle(document.documentElement).getPropertyValue(colorVar).trim();
   const visible = G_ARC * (pctUsed / 100);
   const dash    = `${visible.toFixed(2)} ${(G_CIRC - visible).toFixed(2)}`;
-  const arc = document.getElementById('gauge-arc');
-  const glow= document.getElementById('gauge-glow');
+  const arc  = document.getElementById('gauge-arc');
+  const glow = document.getElementById('gauge-glow');
   if (!arc) return;
   arc.style.strokeDasharray  = dash; arc.setAttribute('stroke', color);
   glow.style.strokeDasharray = dash; glow.setAttribute('stroke', color);
   const gt = document.getElementById('g-pct');
-  if (gt) { gt.textContent = (100 - pctUsed) + '%'; gt.setAttribute('fill', color); }
+  if (gt) { gt.textContent = pctUsed + '%'; gt.setAttribute('fill', color); }
+  const gs = document.getElementById('g-sublabel');
+  if (gs) gs.textContent = 'utilizzato';
   const gu = document.getElementById('g-used');
-  if (gu) gu.textContent = `${pctUsed}% utilizzato`;
+  if (gu) gu.textContent = `${100 - pctUsed}% rimasto`;
 }
 
 function clearGauge() {
@@ -825,6 +830,8 @@ function clearGauge() {
   });
   const gt = document.getElementById('g-pct');
   if (gt) { gt.textContent = '—'; gt.setAttribute('fill','var(--muted)'); }
+  const gs = document.getElementById('g-sublabel');
+  if (gs) gs.textContent = 'utilizzato';
   const gu = document.getElementById('g-used');
   if (gu) gu.textContent = '—';
 }
@@ -942,17 +949,17 @@ function drawSparkline() {
   const canvas = document.getElementById('sparkline');
   if (!canvas) return;
 
-  // Dimensioni robuste: prova parent, poi canvas stesso, poi fallback
+  // Larghezza dal parent, altezza dal canvas stesso (assegnata dal flexbox)
   const parent = canvas.parentElement;
   let W = Math.round(parent.getBoundingClientRect().width);
-  if (!W) W = Math.round(canvas.getBoundingClientRect().width);
   if (!W) W = 400;
-  const H = 140;
+  let H = Math.round(canvas.getBoundingClientRect().height);
+  if (H < 80) H = 160;
+
   canvas.width  = W;
   canvas.height = H;
-  canvas.style.height = H + 'px';
 
-  const ctx  = canvas.getContext('2d');
+  const ctx   = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
 
   const style   = getComputedStyle(document.documentElement);
@@ -960,47 +967,65 @@ function drawSparkline() {
   const cBorder = style.getPropertyValue('--border').trim();
   const cSurf2  = style.getPropertyValue('--surface2').trim();
 
-  // Sfondo sottile
+  // Sfondo
   ctx.fillStyle = cSurf2 + '40';
-  ctx.beginPath();
-  ctx.roundRect(0, 0, W, H, 6);
-  ctx.fill();
+  ctx.beginPath(); ctx.roundRect(0, 0, W, H, 6); ctx.fill();
+
+  // Margini: top per % label, bottom per ora label
+  const PAD_TOP = 10;
+  const PAD_BOT = 18;
+  const chartH  = H - PAD_TOP - PAD_BOT;
+
+  // Asse temporale: finestra fissa 24h
+  const nowTs   = Math.floor(Date.now() / 1000);
+  const startTs = nowTs - 86_400;
+  const xOf = ts => ((ts - startTs) / 86_400) * W;
+  const yOf = pct => PAD_TOP + (1 - pct / 100) * chartH;
+
+  // Filtra ultime 24h + downsample
+  const pts = _downsample(
+    sessionHistory.filter(p => p.ts >= startTs),
+    288
+  );
+
+  // ── Griglia verticale: una linea per ora ─────────────────────────────────
+  // Trova prima ora piena dopo startTs
+  const startDate = new Date(startTs * 1000);
+  startDate.setMinutes(0, 0, 0);
+  startDate.setHours(startDate.getHours() + 1);
+
+  for (let t = startDate.getTime(); t <= Date.now(); t += 3_600_000) {
+    const hh      = new Date(t).getHours();
+    const isMajor = hh === 0 || hh === 6 || hh === 12 || hh === 18;
+    const x       = Math.round(xOf(t / 1000)) + 0.5;
+
+    // Linea verticale
+    ctx.strokeStyle = isMajor ? cBorder : cBorder + '55';
+    ctx.lineWidth   = isMajor ? 1 : 0.5;
+    ctx.setLineDash(isMajor ? [] : [2, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, PAD_TOP);
+    ctx.lineTo(x, H - PAD_BOT);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Etichetta ora (ogni 2h, sempre le major)
+    if (isMajor || hh % 2 === 0) {
+      ctx.fillStyle    = isMajor ? cMuted : cMuted + '88';
+      ctx.font         = isMajor ? 'bold 9px system-ui' : '9px system-ui';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(String(hh).padStart(2, '0') + 'h', x, H - 2);
+    }
+  }
 
   // Baseline
   ctx.strokeStyle = cBorder;
   ctx.lineWidth   = 1;
-  ctx.beginPath(); ctx.moveTo(0, H - 0.5); ctx.lineTo(W, H - 0.5); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(0, H - PAD_BOT); ctx.lineTo(W, H - PAD_BOT); ctx.stroke();
 
-  // Filtra ultime 24h, poi downsampling a max 288 punti per densità visiva
-  const nowTs  = Math.floor(Date.now() / 1000);
-  const pts    = _downsample(
-    sessionHistory.filter(p => p.ts >= nowTs - 86_400),
-    288
-  );
-
-  if (pts.length === 0) {
-    ctx.fillStyle    = cMuted;
-    ctx.font         = '11px system-ui, sans-serif';
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Accumulo dati… (aggiorna tra qualche minuto)', W / 2, H / 2);
-    return;
-  }
-
-  // Con 1 solo punto: duplicalo per disegnare linea orizzontale piatta
-  const pts2 = pts.length === 1 ? [pts[0], pts[0]] : pts;
-
-  // Colore in base al valore corrente
-  const lastPct   = pts2[pts2.length - 1].pct;
-  const colorName = lastPct < 50 ? '--cyan' : lastPct < 75 ? '--amber' : '--red';
-  const cLine     = style.getPropertyValue(colorName).trim();
-
-  const n   = pts2.length;
-  const dx  = n > 1 ? W / (n - 1) : W;
-  const PAD = 8;
-  const yOf = pct => H - PAD - (pct / 100) * (H - PAD * 2);
-
-  // Griglia orizzontale leggera
+  // ── Griglia orizzontale %%  ───────────────────────────────────────────────
   [25, 50, 75].forEach(v => {
     const y = Math.round(yOf(v)) + 0.5;
     ctx.strokeStyle = cBorder;
@@ -1015,48 +1040,62 @@ function drawSparkline() {
     ctx.fillText(v + '%', 4, y - 1);
   });
 
-  // Area riempita con gradiente
-  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  if (pts.length === 0) {
+    ctx.fillStyle    = cMuted;
+    ctx.font         = '11px system-ui, sans-serif';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Accumulo dati… (aggiorna tra qualche minuto)', W / 2, PAD_TOP + chartH / 2);
+    return;
+  }
+
+  const pts2    = pts.length === 1 ? [{ ts: startTs + 43200, pct: pts[0].pct }, pts[0]] : pts;
+  const lastPct = pts2[pts2.length - 1].pct;
+  const cLine   = style.getPropertyValue(lastPct < 50 ? '--cyan' : lastPct < 75 ? '--amber' : '--red').trim();
+
+  // ── Area gradiente ────────────────────────────────────────────────────────
+  const grad = ctx.createLinearGradient(0, PAD_TOP, 0, H - PAD_BOT);
   grad.addColorStop(0, hexToRgba(cLine, 0.35));
   grad.addColorStop(1, hexToRgba(cLine, 0.03));
 
   ctx.beginPath();
-  ctx.moveTo(0, H);
-  pts2.forEach((p, i) => ctx.lineTo(i * dx, yOf(p.pct)));
-  ctx.lineTo((n - 1) * dx, H);
+  ctx.moveTo(xOf(pts2[0].ts), H - PAD_BOT);
+  pts2.forEach(p => ctx.lineTo(xOf(p.ts), yOf(p.pct)));
+  ctx.lineTo(xOf(pts2[pts2.length - 1].ts), H - PAD_BOT);
   ctx.closePath();
   ctx.fillStyle = grad;
   ctx.fill();
 
-  // Linea superiore
+  // ── Linea ─────────────────────────────────────────────────────────────────
   ctx.beginPath();
-  pts2.forEach((p, i) =>
-    i === 0 ? ctx.moveTo(0, yOf(p.pct)) : ctx.lineTo(i * dx, yOf(p.pct)));
+  pts2.forEach((p, i) => {
+    const x = xOf(p.ts), y = yOf(p.pct);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
   ctx.strokeStyle = cLine;
   ctx.lineWidth   = 2;
   ctx.setLineDash([]);
   ctx.stroke();
 
-  // Punto finale (al centro se singolo)
-  const lx = pts.length === 1 ? W / 2 : (n - 1) * dx;
+  // ── Punto finale + etichetta ──────────────────────────────────────────────
+  const lx = xOf(pts2[pts2.length - 1].ts);
   const ly = yOf(lastPct);
   ctx.beginPath();
   ctx.arc(lx, ly, 4, 0, Math.PI * 2);
   ctx.fillStyle = cLine;
   ctx.fill();
-  // Etichetta valore corrente
   ctx.fillStyle    = cLine;
   ctx.font         = 'bold 11px system-ui';
   ctx.textAlign    = lx > W - 40 ? 'right' : 'left';
-  ctx.textBaseline = ly < 20 ? 'top' : 'bottom';
-  ctx.fillText(lastPct + '%', lx + (lx > W - 40 ? -7 : 7), ly + (ly < 20 ? 4 : -4));
-  // Nota "in accumulo" se 1 solo punto
+  ctx.textBaseline = ly < PAD_TOP + 16 ? 'top' : 'bottom';
+  ctx.fillText(lastPct + '%', lx + (lx > W - 40 ? -7 : 7), ly + (ly < PAD_TOP + 16 ? 4 : -4));
+
   if (pts.length === 1) {
     ctx.fillStyle    = cMuted;
     ctx.font         = '9px system-ui';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('Accumulo dati — in attesa del 2° punto…', W / 2, H - 2);
+    ctx.fillText('Accumulo dati — in attesa del 2° punto…', W / 2, H - PAD_BOT - 3);
   }
 }
 
@@ -1178,13 +1217,15 @@ function renderNow() {
   if (pctUsed != null) {
     const colorVar = pctUsed < 50 ? '--green' : pctUsed < 75 ? '--amber' : '--red';
     setGauge(pctUsed, colorVar);
-    document.getElementById('g-sublabel').textContent =
-      acc.messages_remaining != null
-        ? `${acc.messages_remaining} / ${acc.messages_limit}`
-        : 'rimasto';
+    // Se disponibile il conteggio messaggi, mostralo sotto "rimasto"
+    if (acc.messages_remaining != null && acc.messages_limit) {
+      const gu = document.getElementById('g-used');
+      if (gu) gu.textContent = `${100 - pctUsed}% rimasto · ${acc.messages_remaining}/${acc.messages_limit}`;
+    }
   } else {
     clearGauge();
-    document.getElementById('g-sublabel').textContent = 'in attesa…';
+    const gs = document.getElementById('g-sublabel');
+    if (gs) gs.textContent = 'in attesa…';
   }
 
   // Weekly

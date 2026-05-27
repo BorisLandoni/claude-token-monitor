@@ -80,12 +80,22 @@ def _account() -> dict:
     }
 
 def _history() -> list:
-    """Genera ~6h di campioni finti per la sparkline."""
+    """Genera 24h di campioni finti con pattern giornaliero realistico."""
     now_ts = int(time.time())
     pts = []
-    for i in range(360, 0, -1):
-        ts  = now_ts - i * 60
-        pct = round(min(99, max(0, (360 - i) / 3.6 + math.sin(i / 15) * 3)), 1)
+    for i in range(1440, 0, -1):   # 1 punto/min × 24h
+        ts   = now_ts - i * 60
+        hour = (datetime.fromtimestamp(ts, tz=timezone.utc).hour + 1) % 24
+        # Uso basso di notte, picchi mattina/pomeriggio
+        base = (
+            0  if hour < 7  else
+            45 if hour < 9  else
+            75 if hour < 13 else
+            55 if hour < 14 else
+            80 if hour < 19 else
+            30 if hour < 22 else 5
+        )
+        pct = round(min(99, max(0, base + math.sin(i / 20) * 8 + _rng.uniform(-3, 3))), 1)
         pts.append({'ts': ts, 'pct': pct})
     return pts
 
