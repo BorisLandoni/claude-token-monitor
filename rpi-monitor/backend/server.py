@@ -524,6 +524,48 @@ def kiosk_exit():
     return {'ok': True}
 
 
+@app.get('/api/kiosk/diag')
+def kiosk_diag():
+    """Diagnostica file e processi kiosk."""
+    autostart  = Path.home() / '.config' / 'autostart' / 'claude-monitor-kiosk.desktop'
+    script     = Path.home() / 'claude-token-monitor' / 'start-kiosk.sh'
+    kiosk_log  = Path.home() / 'kiosk.log'
+    chromium_paths = []
+    for name in ('chromium', 'chromium-browser'):
+        try:
+            r = subprocess.run(['which', name], capture_output=True, text=True, timeout=3)
+            if r.returncode == 0 and r.stdout.strip():
+                chromium_paths.append(r.stdout.strip())
+        except Exception:
+            pass
+    try:
+        ps = subprocess.run(
+            ['pgrep', '-af', 'chromium|start-kiosk'],
+            capture_output=True, text=True, timeout=3,
+        ).stdout.strip()
+    except Exception:
+        ps = ''
+    log_tail = ''
+    if kiosk_log.exists():
+        try:
+            log_tail = kiosk_log.read_text(errors='replace').splitlines()[-30:]
+            log_tail = '\n'.join(log_tail)
+        except Exception as e:
+            log_tail = f'(errore lettura: {e})'
+    return {
+        'autostart_exists':  autostart.exists(),
+        'autostart_content': autostart.read_text() if autostart.exists() else None,
+        'script_exists':     script.exists(),
+        'script_executable': script.exists() and os.access(script, os.X_OK),
+        'script_content':    script.read_text() if script.exists() else None,
+        'chromium_paths':    chromium_paths,
+        'running_procs':     ps,
+        'kiosk_log_tail':    log_tail,
+        'home':              str(Path.home()),
+        'user':              os.environ.get('USER', '?'),
+    }
+
+
 @app.post('/api/kiosk/start')
 def kiosk_start():
     """Rilancia il kiosk se è stato chiuso."""

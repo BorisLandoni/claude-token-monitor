@@ -265,18 +265,36 @@ AUTOSTART_DIR="$HOME/.config/autostart"
 AUTOSTART_FILE="$AUTOSTART_DIR/claude-monitor-kiosk.desktop"
 KIOSK_SCRIPT="$INSTALL_DIR/start-kiosk.sh"
 
-# Script wrapper con loop di restart: se Chromium muore, riparte dopo 3s
+# Script wrapper con: log di debug, health check, loop di restart.
+# DISPLAY/WAYLAND_DISPLAY sono ereditati dalla sessione desktop —
+# NON va impostato DISPLAY=:0 perché su Wayland (Bookworm default) non esiste.
 cat > "$KIOSK_SCRIPT" <<EOF
 #!/usr/bin/env bash
-# Aspetta che il backend sia pronto
-sleep 10
+# Log per diagnostica
+exec >> "\$HOME/kiosk.log" 2>&1
+echo "[\$(date '+%F %T')] === Kiosk start ==="
+echo "  USER=\$USER  HOME=\$HOME  DISPLAY=\${DISPLAY:-?}  WAYLAND_DISPLAY=\${WAYLAND_DISPLAY:-?}"
+echo "  XDG_SESSION_TYPE=\${XDG_SESSION_TYPE:-?}"
+
+# Attendi che il backend risponda (max 60s)
+for i in \$(seq 1 60); do
+    if curl -fsS http://localhost:$PORT/health >/dev/null 2>&1; then
+        echo "[\$(date '+%F %T')] Backend pronto dopo \${i}s"
+        break
+    fi
+    sleep 1
+done
+
+# Loop infinito: se chromium esce/crash, riparte dopo 3s
 while true; do
-    DISPLAY=:0 $BROWSER_BIN \\
+    echo "[\$(date '+%F %T')] Lancio $BROWSER_BIN"
+    $BROWSER_BIN \\
         --kiosk --noerrdialogs --disable-infobars \\
         --no-first-run --disable-session-crashed-bubble \\
         --disable-translate --overscroll-history-navigation=0 \\
         --window-size=800,480 \\
         http://localhost:$PORT
+    echo "[\$(date '+%F %T')] Browser uscito (\$?), riavvio in 3s"
     sleep 3
 done
 EOF
@@ -287,12 +305,16 @@ cat > "$AUTOSTART_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Claude Monitor Kiosk
+Comment=Avvia Chromium in modalità kiosk sulla dashboard locale
 Exec=bash $KIOSK_SCRIPT
 X-GNOME-Autostart-enabled=true
+StartupNotify=false
+Terminal=false
 EOF
 ok "Kiosk configurato con auto-restart (browser: $BROWSER_BIN)"
-echo "    Script: $KIOSK_SCRIPT"
-echo "    (Il browser si aprirà in kiosk al prossimo avvio e si rilancerà se chiuso)"
+echo "    Script:   $KIOSK_SCRIPT"
+echo "    Log:      \$HOME/kiosk.log"
+echo "    Autostart: $AUTOSTART_FILE"
 
 # ── 12. Firewall: porta 8080 ──────────────────────────────────
 if command -v ufw &>/dev/null; then
