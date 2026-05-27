@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="it" data-theme="dark">
+<html lang="it" data-theme="blue">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=800, height=480, user-scalable=no, initial-scale=1">
@@ -604,9 +604,7 @@ body { background: var(--bg); color: var(--text); }
       <div class="field">
         <label>Tema colore</label>
         <div class="theme-row">
-          <button class="theme-btn active" data-theme="dark"
-                  onclick="changeTheme('dark')">Scuro</button>
-          <button class="theme-btn" data-theme="blue"
+          <button class="theme-btn active" data-theme="blue"
                   onclick="changeTheme('blue')">Blu</button>
           <button class="theme-btn" data-theme="purple"
                   onclick="changeTheme('purple')">Viola</button>
@@ -1061,7 +1059,7 @@ async function loadData() {
     sessionResetTs = account.session_resets_at_ts || account.reset_at_ts || null;
     pollIntervalMs = (settings.poll_interval || 60) * 1000;
     lastLoadTs     = Date.now();
-    applyTheme(settings.theme || 'dark');
+    applyTheme(settings.theme || 'blue');
     render();
     drawSparkline();
     renderRefreshBar();

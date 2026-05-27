@@ -350,7 +350,7 @@ class SettingsUpdate(BaseModel):
 def get_settings():
     return {
         'poll_interval': store.settings.get('poll_interval', 60),
-        'theme': store.settings.get('theme', 'dark'),
+        'theme': store.settings.get('theme', 'blue'),
         'email': store.settings.get('email', ''),
     }
 
