@@ -21,8 +21,6 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 PORT = 8080
-# In repo: rpi-monitor/backend/ → frontend è ../frontend
-# In tmp/ (sviluppo): index.html è nella stessa cartella
 _repo_frontend = Path(__file__).parent.parent / 'frontend'
 FRONTEND_DIR   = _repo_frontend if _repo_frontend.exists() else Path(__file__).parent
 
@@ -38,31 +36,18 @@ ROUTINES_USED = _rng.randint(0, 3)
 CREDITS_SPENT = round(_rng.uniform(1.2, 7.8), 2)
 CREDITS_LIMIT = 10.0
 
-SETTINGS = {'poll_interval': 60, 'theme': 'dark', 'email': 'demo@simulazione.it'}
-
-# Dati orari: realistici, picchi 9-12 e 14-18
-_now_h = datetime.now(timezone.utc).hour
-HOURLY = []
-for _i in range(24):
-    _h = (_now_h - 23 + _i) % 24
-    if 8 <= _h <= 22:
-        _base = 0.030 if (9 <= _h <= 12 or 14 <= _h <= 18) else 0.010
-        _cost = round(_base * _rng.uniform(0.3, 2.2), 5)
-    else:
-        _cost = 0.0
-    HOURLY.append({'label': str(_h).zfill(2), 'cost': _cost, 'input': 0, 'output': 0})
+SETTINGS = {'poll_interval': 60, 'theme': 'blue', 'email': 'demo@simulazione.it'}
 
 
-# ── Funzioni helper ───────────────────────────────────────────────────────────
 def _session_pct() -> float:
     global SESSION_START_TS
     now     = time.time()
     elapsed = now - SESSION_START_TS
-    if elapsed >= SESSION_SECS:          # sessione scaduta → reset automatico
+    if elapsed >= SESSION_SECS:
         SESSION_START_TS = now
         elapsed = 0
     raw    = (elapsed / SESSION_SECS) * 100
-    jitter = math.sin(elapsed / 240) * 1.5   # piccola oscillazione realistica
+    jitter = math.sin(elapsed / 240) * 1.5
     return min(99.0, max(0.0, raw + jitter))
 
 def _reset_ts() -> int:
@@ -76,7 +61,8 @@ def _account() -> dict:
         'session_pct_remaining': round(100 - spct),
         'weekly_pct_used':       WEEKLY_PCT,
         'weekly_pct_remaining':  100 - WEEKLY_PCT,
-        'weekly_resets_label':   'Lunedì',
+        'weekly_resets_label':   'Lun 00:00',
+        'weekly_resets_at_ts':   _reset_ts() + 2 * 86400,
         'design_pct_used':       DESIGN_PCT,
         'design_pct_remaining':  100 - DESIGN_PCT,
         'routines_used':         ROUTINES_USED,
@@ -86,11 +72,22 @@ def _account() -> dict:
         'credits_balance_eur':   round(CREDITS_LIMIT - CREDITS_SPENT, 2),
         'credits_reset_label':   'giugno 1',
         'reset_at':              datetime.fromtimestamp(_reset_ts(), tz=timezone.utc).isoformat(),
+        'reset_at_ts':           _reset_ts(),
         'session_resets_at_ts':  _reset_ts(),
         'session_status':        'ok',
         'plan':                  'pro',
         'ts':                    int(time.time() * 1000),
     }
+
+def _history() -> list:
+    """Genera ~6h di campioni finti per la sparkline."""
+    now_ts = int(time.time())
+    pts = []
+    for i in range(360, 0, -1):
+        ts  = now_ts - i * 60
+        pct = round(min(99, max(0, (360 - i) / 3.6 + math.sin(i / 15) * 3)), 1)
+        pts.append({'ts': ts, 'pct': pct})
+    return pts
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
@@ -101,50 +98,20 @@ app = FastAPI(title='Claude Monitor — Simulazione')
 def get_account():
     return _account()
 
-@app.post('/api/account')
-async def post_account(req: Request):
-    return {'ok': True, 'account': _account()}
-
-@app.get('/api/tokens/hourly')
-def get_hourly():
-    return HOURLY
-
-@app.get('/api/tokens/daily')
-def get_daily():
-    return []
-
-@app.get('/api/tokens/weekly')
-def get_weekly():
-    return []
-
-@app.get('/api/tokens')
-def get_tokens():
-    return {
-        'requests_count': 47, 'cost_usd': 0.312,
-        'total_input': 120000, 'total_output': 35000, 'last_updated': None,
-    }
-
-@app.post('/api/tokens')
-async def post_tokens(req: Request):
-    return {'ok': True, 'stats': {'requests_count': 48, 'cost_usd': 0.315}}
-
-@app.delete('/api/tokens')
-def delete_tokens():
-    return {'ok': True}
+@app.get('/api/account/history')
+def get_account_history():
+    return _history()
 
 @app.get('/api/session')
 def get_session():
     return {
-        'logged_in':        True,
-        'email':            SETTINGS['email'],
-        'session_status':   'ok',
-        'cookie_age_hours': round((time.time() - START_TS) / 3600 + 0.3, 1),
+        'logged_in':         True,
+        'oauth_available':   True,
+        'cookies_available': False,
+        'email':             SETTINGS['email'],
+        'session_status':    'ok',
+        'cookie_age_hours':  None,
     }
-
-@app.post('/api/login')
-async def login(req: Request):
-    await asyncio.sleep(1.5)   # simula latenza Playwright
-    return {'ok': True, 'message': 'Login simulato riuscito'}
 
 @app.post('/api/logout')
 def logout():
@@ -153,7 +120,7 @@ def logout():
 @app.post('/api/poll')
 async def force_poll():
     await asyncio.sleep(0.4)
-    return {'ok': True, 'account': _account()}
+    return {'ok': True, 'refreshed': True, 'next_poll_in': 30, 'account': _account()}
 
 @app.get('/api/settings')
 def get_settings():
@@ -166,6 +133,55 @@ async def update_settings(req: Request):
         if v is not None:
             SETTINGS[k] = v
     return {'ok': True, 'settings': SETTINGS}
+
+@app.get('/api/version')
+def get_version():
+    ver_file = Path(__file__).parent.parent.parent / 'VERSION'
+    v = ver_file.read_text().strip() if ver_file.exists() else '1.3.0'
+    return {'version': v, 'commit': 'sim0001', 'install_dir': None}
+
+@app.get('/api/version/check')
+async def check_version():
+    ver_file = Path(__file__).parent.parent.parent / 'VERSION'
+    current  = ver_file.read_text().strip() if ver_file.exists() else '1.3.0'
+    return {'current': current, 'latest': current, 'up_to_date': True, 'update_available': False}
+
+@app.post('/api/login/start')
+async def login_start():
+    await asyncio.sleep(1.0)
+    return {'ok': True, 'url': None, 'status': 'error'}
+
+@app.get('/api/login/status')
+def login_status():
+    return {'url': None, 'status': 'idle'}
+
+@app.post('/api/login/cancel')
+def login_cancel():
+    return {'ok': True}
+
+@app.post('/api/restart')
+def restart():
+    return {'ok': True}
+
+@app.post('/api/kiosk/exit')
+def kiosk_exit():
+    return {'ok': True}
+
+@app.post('/api/kiosk/start')
+def kiosk_start():
+    return {'ok': True}
+
+@app.get('/api/kiosk/diag')
+def kiosk_diag():
+    return {'autostart_exists': False, 'script_exists': False, 'running_procs': ''}
+
+@app.post('/api/update')
+async def run_update():
+    return {'ok': False, 'reason': 'Non disponibile in modalità simulazione'}
+
+@app.get('/api/update/log')
+def update_log():
+    return {'running': False, 'log': ''}
 
 @app.get('/health')
 def health():

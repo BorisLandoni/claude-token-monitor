@@ -1,9 +1,8 @@
 """
-Claude.ai client: Playwright-based login + lightweight httpx polling.
+Claude.ai client: OAuth polling (primary) + Playwright DOM scrape (secondary).
 
-First run:  login_playwright(email, password)  → saves cookies + discovers API endpoint
-Subsequent: poll_limits()                       → fast httpx poll with saved cookies
-Fallback:   poll_with_playwright()              → loads settings page if httpx fails
+Primary:   poll_oauth_usage()      → Claude Code credentials, ~1s
+Secondary: poll_with_playwright()  → cookie-based Playwright for Design + routine data
 """
 
 import asyncio
@@ -12,7 +11,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional
 
 import httpx
 
@@ -23,7 +22,6 @@ except ImportError:
     HAS_PLAYWRIGHT = False
 
 COOKIES_FILE   = Path(__file__).parent / 'cookies.json'
-ENDPOINTS_FILE = Path(__file__).parent / 'endpoints.json'
 CHROMIUM_PATH  = os.getenv('CHROMIUM_PATH', '')
 
 # Claude Code OAuth credentials (auto-managed by Claude Code)
@@ -33,27 +31,10 @@ OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
 OAUTH_MIN_INTERVAL     = 30    # secondi minimi tra due chiamate OAuth
 OAUTH_BACKOFF_429      = 180   # secondi di attesa dopo un 429
 
-# Candidate endpoints tried when polling (best candidates first)
-CANDIDATE_URLS = [
-    'https://claude.ai/api/organizations',
-    'https://claude.ai/api/account',
-    'https://claude.ai/api/me',
-    'https://claude.ai/api/bootstrap',
-    'https://claude.ai/api/auth/session',
-]
-
-_BROWSER_HEADERS = {
-    'User-Agent': (
-        'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 '
-        '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-    ),
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'it-IT,it;q=0.9,en;q=0.8',
-    'Referer': 'https://claude.ai/',
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'same-origin',
-}
+_BROWSER_UA = (
+    'Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+)
 
 
 # ── Recursive extractor for any claude.ai JSON response ──────────────────────
@@ -252,21 +233,9 @@ async def _scrape_settings_dom(page) -> Optional[dict]:
 # ── ClaudeClient ──────────────────────────────────────────────────────────────
 
 class ClaudeClient:
-    def __init__(self, on_limits_found: Optional[Callable[[dict], None]] = None):
-        self.on_limits_found = on_limits_found
-        self._discovered_url: Optional[str] = None
-        self._load_endpoints()
 
-    def _load_endpoints(self):
-        if ENDPOINTS_FILE.exists():
-            try:
-                self._discovered_url = json.loads(ENDPOINTS_FILE.read_text()).get('limits_url')
-            except Exception:
-                pass
-
-    def _save_endpoints(self, url: str):
-        self._discovered_url = url
-        ENDPOINTS_FILE.write_text(json.dumps({'limits_url': url}))
+    _oauth_last_call: float = 0        # timestamp ultima chiamata riuscita
+    _oauth_retry_after: float = 0      # timestamp fino a quando NON chiamare (dopo 429)
 
     def has_cookies(self) -> bool:
         return COOKIES_FILE.exists()
@@ -276,110 +245,13 @@ class ClaudeClient:
             return None
         return time.time() - COOKIES_FILE.stat().st_mtime
 
-    def _httpx_cookies(self) -> dict:
-        if not COOKIES_FILE.exists():
-            return {}
-        try:
-            raw = json.loads(COOKIES_FILE.read_text())
-            return {c['name']: c['value'] for c in raw}
-        except Exception:
-            return {}
-
     def _make_playwright_launch_opts(self) -> dict:
         opts: dict = {'headless': True}
         if CHROMIUM_PATH:
             opts['executable_path'] = CHROMIUM_PATH
         return opts
 
-    # ── Cookie import (bypass Cloudflare/magic-link) ─────────────────────────
-    def import_cookies_from_text(self, text: str) -> tuple[int, str]:
-        """
-        Importa cookie da:
-          - comando cURL (con -H 'Cookie: ...' o -b '...')
-          - stringa raw 'name=value; name=value'
-          - array JSON Playwright-style
-        Salva in cookies.json. Ritorna (numero_cookie, messaggio).
-        """
-        text = (text or '').strip()
-        if not text:
-            return 0, 'Testo vuoto'
-
-        cookies: list[dict] = []
-
-        # Tentativo 1: JSON array (formato Playwright/export)
-        if text.startswith('['):
-            try:
-                data = json.loads(text)
-                if isinstance(data, list):
-                    for c in data:
-                        if 'name' in c and 'value' in c:
-                            cookies.append({
-                                'name':     c['name'],
-                                'value':    c['value'],
-                                'domain':   c.get('domain', '.claude.ai'),
-                                'path':     c.get('path', '/'),
-                                'httpOnly': c.get('httpOnly', True),
-                                'secure':   c.get('secure', True),
-                                'sameSite': c.get('sameSite', 'Lax'),
-                            })
-            except Exception:
-                pass
-
-        # Tentativo 2: cURL → estrai header Cookie
-        if not cookies:
-            cookie_str = None
-            for pat in (
-                r"-H\s+['\"]Cookie:\s*([^'\"]+)['\"]",        # -H 'Cookie: xxx'
-                r"-H\s+\^?\"Cookie:\s*([^\"]+)\"",            # -H "Cookie: xxx"
-                r"--cookie\s+['\"]([^'\"]+)['\"]",            # --cookie 'xxx'
-                r"-b\s+['\"]([^'\"]+)['\"]",                  # -b 'xxx'
-            ):
-                m = re.search(pat, text, re.IGNORECASE | re.DOTALL)
-                if m:
-                    cookie_str = m.group(1)
-                    break
-
-            # Tentativo 3: assume stringa raw "name=value; ..."
-            if not cookie_str and '=' in text and ';' in text:
-                cookie_str = text
-
-            if cookie_str:
-                for pair in cookie_str.split(';'):
-                    pair = pair.strip()
-                    if '=' not in pair:
-                        continue
-                    name, value = pair.split('=', 1)
-                    name, value = name.strip(), value.strip()
-                    if not name or not value:
-                        continue
-                    cookies.append({
-                        'name':     name,
-                        'value':    value,
-                        'domain':   '.claude.ai',
-                        'path':     '/',
-                        'httpOnly': True,
-                        'secure':   True,
-                        'sameSite': 'Lax',
-                    })
-
-        if not cookies:
-            return 0, 'Nessun cookie trovato. Controlla il formato.'
-
-        # Cerca il cookie di sessione (sessionKey/lastActiveOrg/etc)
-        has_session = any(c['name'].lower() in ('sessionkey', '__secure-next-auth.session-token')
-                          or 'session' in c['name'].lower()
-                          for c in cookies)
-
-        COOKIES_FILE.write_text(json.dumps(cookies))
-        msg = f'{len(cookies)} cookie importati'
-        if not has_session:
-            msg += ' (attenzione: nessun cookie di sessione riconosciuto)'
-        return len(cookies), msg
-
     # ── OAuth (Claude Code credentials, primary auth) ─────────────────────────
-
-    _oauth_last_call: float = 0        # timestamp ultima chiamata riuscita
-    _oauth_retry_after: float = 0      # timestamp fino a quando NON chiamare (dopo 429)
 
     def has_oauth(self) -> bool:
         return OAUTH_CREDENTIALS_FILE.exists()
@@ -415,7 +287,7 @@ class ClaudeClient:
 
         # Intervallo minimo tra chiamate (evita burst)
         if now - self._oauth_last_call < OAUTH_MIN_INTERVAL:
-            return None  # usa i dati già in store (non serve ri-loggare)
+            return None
 
         token = self.get_oauth_token()
         if not token:
@@ -440,7 +312,7 @@ class ClaudeClient:
                 print(f'[oauth] HTTP {resp.status_code}: {resp.text[:200]}')
                 return None
 
-            self._oauth_last_call = time.time()  # aggiorna timestamp solo su successo
+            self._oauth_last_call = time.time()
 
             data = resp.json()
             print(f'[oauth] raw response: {json.dumps(data)[:300]}')
@@ -450,7 +322,7 @@ class ClaudeClient:
                 """Converte utilization API → intero 0-100.
                 L'endpoint Anthropic restituisce frazioni 0-1 (es. 0.62 = 62%)."""
                 f = float(v)
-                if f <= 1.0:          # formato frazione 0-1
+                if f <= 1.0:
                     f *= 100
                 return min(100, max(0, round(f)))
 
@@ -486,8 +358,6 @@ class ClaudeClient:
             # Crediti (extra_usage, in centesimi EUR)
             eu = data.get('extra_usage') or {}
             if eu.get('is_enabled') and eu.get('monthly_limit') is not None:
-                cur = eu.get('currency', 'EUR')
-                # Heuristica unità: se utilization*limit ≈ used → cents
                 limit_cents = float(eu['monthly_limit'])
                 used_cents  = float(eu.get('used_credits', 0))
                 out['credits_limit_eur']   = round(limit_cents / 100, 2)
@@ -518,165 +388,6 @@ class ClaudeClient:
         except Exception:
             return None
 
-    # ── Login (one-time) ──────────────────────────────────────────────────────
-
-    async def login_playwright(self, email: str, password: str) -> tuple[bool, str]:
-        """Log in to claude.ai (email + password). Per account senza password
-        usare invece import_cookies_from_text() con cookie esportati da Chrome."""
-        if not HAS_PLAYWRIGHT:
-            return False, 'Playwright non installato. Esegui: pip install playwright && playwright install chromium'
-
-        try:
-            async with async_playwright() as pw:
-                launch_opts = self._make_playwright_launch_opts()
-                browser = await pw.chromium.launch(**launch_opts)
-                ctx = await browser.new_context(
-                    user_agent=_BROWSER_HEADERS['User-Agent'],
-                    viewport={'width': 1280, 'height': 800},
-                )
-                page = await ctx.new_page()
-
-                found_limits: dict = {}
-                found_url: list = [None]
-
-                async def handle_response(response):
-                    try:
-                        if 'claude.ai' not in response.url or response.status != 200:
-                            return
-                        ct = response.headers.get('content-type', '')
-                        if 'application/json' not in ct:
-                            return
-                        body = await response.json()
-                        limits = extract_account_limits(body)
-                        if limits:
-                            found_limits.update(limits)
-                            if found_url[0] is None:
-                                found_url[0] = response.url
-                    except Exception:
-                        pass
-
-                page.on('response', handle_response)
-
-                # Step 1: navigate to login
-                await page.goto('https://claude.ai/login',
-                                wait_until='domcontentloaded', timeout=30_000)
-                await page.wait_for_timeout(1500)
-
-                # Step 2: fill email
-                try:
-                    sel = 'input[type="email"], input[name="email"], input[autocomplete="email"]'
-                    await page.locator(sel).first.fill(email)
-                    btn = page.locator('button[type="submit"]').first
-                    if await btn.is_visible():
-                        await btn.click()
-                    await page.wait_for_timeout(2000)
-                except Exception as e:
-                    print(f'[login] email step: {e}')
-
-                # Step 3: fill password
-                try:
-                    await page.locator('input[type="password"]').first.fill(password)
-                    await page.keyboard.press('Enter')
-                except Exception as e:
-                    print(f'[login] password step: {e}')
-
-                # Step 4: wait for redirect
-                try:
-                    await page.wait_for_url('https://claude.ai/**', timeout=30_000)
-                    await page.wait_for_load_state('networkidle', timeout=15_000)
-                except Exception:
-                    pass
-                await page.wait_for_timeout(2000)
-
-                # Step 5: navigate to settings/utilizzo to get usage data
-                try:
-                    await page.goto('https://claude.ai/settings',
-                                    wait_until='domcontentloaded', timeout=20_000)
-                    await page.wait_for_timeout(1000)
-                    # Try clicking "Utilizzo" tab
-                    for sel in ('[role="tab"]:has-text("Utilizzo")',
-                                'button:has-text("Utilizzo")',
-                                'a:has-text("Utilizzo")'):
-                        try:
-                            el = page.locator(sel).first
-                            if await el.is_visible(timeout=2000):
-                                await el.click()
-                                await page.wait_for_timeout(1500)
-                                break
-                        except Exception:
-                            pass
-                    await page.wait_for_timeout(2000)
-                    # DOM scrape as supplement
-                    dom_data = await _scrape_settings_dom(page)
-                    if dom_data:
-                        found_limits.update(dom_data)
-                except Exception as e:
-                    print(f'[login] settings nav: {e}')
-
-                cookies = await ctx.cookies()
-                await browser.close()
-
-                if not cookies:
-                    return False, 'Accesso fallito: nessun cookie. Controlla email/password.'
-
-                COOKIES_FILE.write_text(json.dumps(cookies))
-                print(f'[login] {len(cookies)} cookie salvati')
-
-                if found_url[0]:
-                    self._save_endpoints(found_url[0])
-                    print(f'[login] endpoint: {found_url[0]}')
-
-                if found_limits:
-                    if self.on_limits_found:
-                        self.on_limits_found(found_limits)
-
-                return True, f'Accesso riuscito ({len(cookies)} cookie)'
-
-        except Exception as e:
-            return False, f'Errore accesso: {str(e)}'
-
-    # ── Fast httpx poll ───────────────────────────────────────────────────────
-
-    async def poll_limits(self) -> Optional[dict]:
-        """Poll claude.ai account limits via httpx with saved cookies. ~1s."""
-        cookies = self._httpx_cookies()
-        if not cookies:
-            return None
-
-        urls = []
-        if self._discovered_url:
-            urls.append(self._discovered_url)
-        urls.extend(u for u in CANDIDATE_URLS if u != self._discovered_url)
-
-        async with httpx.AsyncClient(
-            headers=_BROWSER_HEADERS,
-            cookies=cookies,
-            follow_redirects=True,
-            timeout=15.0,
-        ) as client:
-            for url in urls:
-                try:
-                    resp = await client.get(url)
-                    if resp.status_code in (401, 403):
-                        print('[poll] sessione scaduta')
-                        return {'_error': 'session_expired'}
-                    if resp.status_code != 200:
-                        continue
-                    try:
-                        data = resp.json()
-                    except Exception:
-                        continue
-                    limits = extract_account_limits(data)
-                    if limits:
-                        if url != self._discovered_url:
-                            self._save_endpoints(url)
-                        print(f'[poll] httpx OK: {url}')
-                        return limits
-                except Exception as e:
-                    print(f'[poll] {url}: {e}')
-
-        return None
-
     # ── Playwright fallback poll ───────────────────────────────────────────────
 
     async def poll_with_playwright(self) -> Optional[dict]:
@@ -687,15 +398,13 @@ class ClaudeClient:
         try:
             async with async_playwright() as pw:
                 browser = await pw.chromium.launch(**self._make_playwright_launch_opts())
-                ctx = await browser.new_context(
-                    user_agent=_BROWSER_HEADERS['User-Agent'])
+                ctx = await browser.new_context(user_agent=_BROWSER_UA)
 
                 saved = json.loads(COOKIES_FILE.read_text())
                 await ctx.add_cookies(saved)
 
                 page = await ctx.new_page()
                 found_limits: list = [None]
-                found_url:    list = [None]
 
                 async def handle_response(response):
                     if found_limits[0]:
@@ -710,13 +419,11 @@ class ClaudeClient:
                         limits = extract_account_limits(body)
                         if limits:
                             found_limits[0] = limits
-                            found_url[0] = response.url
                     except Exception:
                         pass
 
                 page.on('response', handle_response)
 
-                # Navigate directly to settings/utilizzo
                 await page.goto('https://claude.ai/settings',
                                 wait_until='domcontentloaded', timeout=30_000)
                 await page.wait_for_timeout(1500)
@@ -732,16 +439,11 @@ class ClaudeClient:
                         pass
                 await page.wait_for_timeout(2500)
 
-                # DOM scrape
                 dom_data = await _scrape_settings_dom(page)
 
-                # Merge API + DOM data
                 combined = found_limits[0] or {}
                 if dom_data:
                     combined = {**combined, **dom_data}
-
-                if found_url[0]:
-                    self._save_endpoints(found_url[0])
 
                 # Refresh cookies
                 new_cookies = await ctx.cookies()

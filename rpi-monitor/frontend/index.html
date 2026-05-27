@@ -289,13 +289,6 @@ body { background: var(--bg); color: var(--text); }
   background:var(--surface); border:1px solid var(--border);
   border-radius:8px; font-size:11px; color:var(--muted); line-height:1.6;
 }
-#setup-log {
-  background:var(--bg); border:1px solid var(--border2);
-  border-radius:6px; padding:8px;
-  font-family:monospace; font-size:10px; color:var(--green);
-  max-height:100px; overflow-y:auto; white-space:pre-wrap;
-  margin-top:8px; display:none;
-}
 #update-log {
   background:var(--bg); border:1px solid var(--border2);
   border-radius:6px; padding:8px;
@@ -631,7 +624,7 @@ body { background: var(--bg); color: var(--text); }
         ↺ &nbsp;Rinnova Login Claude
       </button>
 
-      <button class="btn-danger" onclick="doLogout()">
+      <button id="logout-btn" class="btn-danger" onclick="doLogout()">
         Cancella sessione locale
       </button>
 
@@ -658,7 +651,7 @@ body { background: var(--bg); color: var(--text); }
       <div class="settings-title">PREFERENZE</div>
 
       <div class="field">
-        <label>Aggiornamento automatico</label>
+        <label>Aggiornamento automatico (poll OAuth)</label>
         <select id="poll-interval" onchange="savePollInterval()">
           <option value="60" selected>1 minuto</option>
           <option value="120">2 minuti</option>
@@ -666,6 +659,8 @@ body { background: var(--bg); color: var(--text); }
           <option value="600">10 minuti</option>
           <option value="1800">30 minuti</option>
         </select>
+        <div id="poll-info"
+             style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:2px"></div>
       </div>
 
       <div class="field">
@@ -673,6 +668,8 @@ body { background: var(--bg); color: var(--text); }
         <div class="theme-row">
           <button class="theme-btn active" data-theme="blue"
                   onclick="changeTheme('blue')">Blu</button>
+          <button class="theme-btn" data-theme="dark"
+                  onclick="changeTheme('dark')">Scuro</button>
           <button class="theme-btn" data-theme="purple"
                   onclick="changeTheme('purple')">Viola</button>
           <button class="theme-btn" data-theme="light"
@@ -839,7 +836,6 @@ let DATA = {};
 let currentPage    = 'now';
 let sessionResetTs = null;
 let refreshTimer   = null;
-let hourlyData     = [];
 let sessionHistory = [];
 let alertShownAt   = 0;
 let alertDismissTs = 0;
@@ -916,11 +912,13 @@ function renderTimeline() {
   if (end)   end.textContent   = fmt(sessionResetTs) + ' ↺';
 }
 
+const DISPLAY_REFRESH_MS = 60_000;  // il display si ricarica sempre ogni 60s
+
 function renderRefreshBar() {
   const bar = document.getElementById('refresh-bar');
   if (!bar) return;
   const elapsed = Date.now() - lastLoadTs;
-  const pct = Math.min(100, (elapsed / pollIntervalMs) * 100);
+  const pct = Math.min(100, (elapsed / DISPLAY_REFRESH_MS) * 100);
   bar.style.width = pct + '%';
   bar.style.background = pct > 85 ? 'var(--amber)' : 'var(--cyan)';
 }
@@ -928,6 +926,18 @@ function renderRefreshBar() {
 /* ════════════════════════════════════════════════════════════════════════════
    SPARKLINE — area chart sessione % 24 ore
    ════════════════════════════════════════════════════════════════════════ */
+function _downsample(pts, maxPts) {
+  if (pts.length <= maxPts) return pts;
+  const bucket = Math.ceil(pts.length / maxPts);
+  const result = [];
+  for (let i = 0; i < pts.length; i += bucket) {
+    const sl  = pts.slice(i, i + bucket);
+    const avg = sl.reduce((s, p) => s + p.pct, 0) / sl.length;
+    result.push({ ts: sl[Math.floor(sl.length / 2)].ts, pct: Math.round(avg) });
+  }
+  return result;
+}
+
 function drawSparkline() {
   const canvas = document.getElementById('sparkline');
   if (!canvas) return;
@@ -961,7 +971,12 @@ function drawSparkline() {
   ctx.lineWidth   = 1;
   ctx.beginPath(); ctx.moveTo(0, H - 0.5); ctx.lineTo(W, H - 0.5); ctx.stroke();
 
-  const pts = sessionHistory.slice(-288);  // max 288 punti (~24h a 5min, ~4.8h a 1min)
+  // Filtra ultime 24h, poi downsampling a max 288 punti per densità visiva
+  const nowTs  = Math.floor(Date.now() / 1000);
+  const pts    = _downsample(
+    sessionHistory.filter(p => p.ts >= nowTs - 86_400),
+    288
+  );
 
   if (pts.length === 0) {
     ctx.fillStyle    = cMuted;
@@ -1097,15 +1112,13 @@ function closeInfoOutside(e) {
    ════════════════════════════════════════════════════════════════════════ */
 async function loadData() {
   try {
-    const [account, settings, session, hourly, history] = await Promise.all([
+    const [account, settings, session, history] = await Promise.all([
       fetch('/api/account').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/session').then(r => r.json()),
-      fetch('/api/tokens/hourly').then(r => r.json()),
       fetch('/api/account/history').then(r => r.json()).catch(() => []),
     ]);
     DATA = { account, settings, session };
-    hourlyData     = Array.isArray(hourly)  ? hourly  : [];
     sessionHistory = Array.isArray(history) ? history : [];
     sessionResetTs = account.session_resets_at_ts || account.reset_at_ts || null;
     pollIntervalMs = (settings.poll_interval || 60) * 1000;
@@ -1307,13 +1320,16 @@ function renderSettings() {
   }
   el.innerHTML = lines.join('<br>');
 
-  // Mostra "Rinnova Login" solo se scaduto; nascondi "Aggiorna Adesso" inutile
+  // Mostra "Rinnova Login" solo se scaduto; "Aggiorna Adesso" solo se connesso e ok
   const pollBtn    = document.getElementById('poll-btn');
   const reloginBtn = document.getElementById('relogin-btn');
-  if (pollBtn)    pollBtn.style.display    = oauthExpired ? 'none' : '';
-  if (reloginBtn) reloginBtn.style.display = oauthExpired ? ''     : 'none';
+  if (pollBtn)    pollBtn.style.display    = (s.logged_in && !oauthExpired) ? '' : 'none';
+  if (reloginBtn) reloginBtn.style.display = oauthExpired ? '' : 'none';
 
-  document.getElementById('poll-interval').value = String(cfg.poll_interval || 60);
+  const pi = cfg.poll_interval || 60;
+  document.getElementById('poll-interval').value = String(pi);
+  const piLabel = pi >= 1800 ? '30 min' : pi >= 600 ? '10 min' : pi >= 300 ? '5 min' : pi >= 120 ? '2 min' : '1 min';
+  setText('poll-info', `Display: ogni 60s · Dati Claude: ogni ${piLabel}`);
   document.querySelectorAll('.theme-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'blue')));
   const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
@@ -1353,16 +1369,41 @@ async function nowRefresh() {
   btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
 }
 
+function armButton(btn, label, actionFn) {
+  if (!btn) return;
+  if (btn.dataset.armed === '1') {
+    btn.dataset.armed = '0';
+    actionFn();
+    return;
+  }
+  const orig = { text: btn.textContent, border: btn.style.borderColor, color: btn.style.color };
+  btn.dataset.armed = '1';
+  btn.textContent   = label;
+  btn.style.borderColor = 'var(--amber)';
+  btn.style.color       = 'var(--amber)';
+  setTimeout(() => {
+    if (btn.dataset.armed === '1') {
+      btn.dataset.armed     = '0';
+      btn.textContent       = orig.text;
+      btn.style.borderColor = orig.border;
+      btn.style.color       = orig.color;
+    }
+  }, 3000);
+}
+
 async function doLogout() {
-  await fetch('/api/logout', { method:'POST' });
-  await loadData();
+  armButton(document.getElementById('logout-btn'), 'Sicuro? Tocca di nuovo per confermare',
+    async () => {
+      await fetch('/api/logout', { method:'POST' });
+      await loadData();
+    });
 }
 
 async function exitKiosk() {
-  if (!confirm('Chiudere il kiosk e tornare al desktop?\nIl monitor continua a girare in background.')) return;
-  try {
-    await fetch('/api/kiosk/exit', { method:'POST' });
-  } catch(e) {}
+  armButton(document.getElementById('kiosk-exit-btn'), '⊞ Sicuro? Tocca di nuovo per uscire',
+    async () => {
+      try { await fetch('/api/kiosk/exit', { method:'POST' }); } catch(e) {}
+    });
 }
 
 async function forcePoll() {
@@ -1401,12 +1442,6 @@ async function changeTheme(theme) {
    UTILS
    ════════════════════════════════════════════════════════════════════════ */
 function applyTheme(t) { document.documentElement.dataset.theme = t; }
-function showOverlay(msg) {
-  document.getElementById('overlay-msg').innerHTML =
-    (msg || 'Caricamento…').replace('\n','<br>');
-  document.getElementById('overlay').classList.add('show');
-}
-function hideOverlay() { document.getElementById('overlay').classList.remove('show'); }
 function fmtEur(n) {
   if (n == null || isNaN(n)) return '—';
   return n.toLocaleString('it-IT', { minimumFractionDigits:2, maximumFractionDigits:2 }) + ' €';

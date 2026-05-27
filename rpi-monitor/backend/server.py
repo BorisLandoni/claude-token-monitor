@@ -196,71 +196,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title='Claude Monitor', lifespan=lifespan)
 
 
-# ── Token endpoints ───────────────────────────────────────────────────────────
-
-class TokenEvent(BaseModel):
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_creation_tokens: int = 0
-
-
-@app.get('/api/tokens')
-def get_tokens():
-    return store.session_totals()
-
-
-@app.post('/api/tokens')
-def post_tokens(body: TokenEvent):
-    store.add_token_event(
-        body.input_tokens, body.output_tokens,
-        body.cache_read_tokens, body.cache_creation_tokens,
-    )
-    stats = store.session_totals()
-    print(f"[token] #{stats['requests_count']} in:{body.input_tokens} out:{body.output_tokens} | ${stats['cost_usd']}")
-    return {'ok': True, 'stats': stats}
-
-
-@app.delete('/api/tokens')
-def delete_tokens():
-    store.history.clear()
-    store.save()
-    return {'ok': True}
-
-
-@app.get('/api/tokens/hourly')
-def get_hourly():
-    return store.get_hourly()
-
-
-@app.get('/api/tokens/daily')
-def get_daily():
-    return store.get_daily()
-
-
-@app.get('/api/tokens/weekly')
-def get_weekly():
-    return store.get_weekly()
-
-
 # ── Account endpoints ──────────────────────────────────────────────────────────
-
-class AccountData(BaseModel):
-    messages_remaining: Optional[int] = None
-    messages_limit: Optional[int] = None
-    messages_used: Optional[int] = None
-    reset_at: Optional[str] = None
-    plan: Optional[str] = None
-
-
-@app.post('/api/account')
-def post_account(body: AccountData):
-    data = body.model_dump()
-    if data['messages_remaining'] is None and data['messages_limit'] is None:
-        return {'ok': False, 'reason': 'no useful data'}
-    process_account_limits(data)
-    return {'ok': True, 'account': store.account}
-
 
 @app.get('/api/account')
 def get_account():
@@ -303,10 +239,9 @@ async def force_poll():
 
 @app.post('/api/logout')
 def logout():
-    from claude_client import COOKIES_FILE, ENDPOINTS_FILE
-    for f in [COOKIES_FILE, ENDPOINTS_FILE]:
-        if f.exists():
-            f.unlink()
+    from claude_client import COOKIES_FILE
+    if COOKIES_FILE.exists():
+        COOKIES_FILE.unlink()
     store.account = None
     store.save()
     return {'ok': True}
