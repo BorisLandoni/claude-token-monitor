@@ -536,7 +536,8 @@ body { background: var(--bg); color: var(--text); }
 
       <!-- Barra progresso + footer -->
       <div class="now-footer-wrap">
-        <div class="refresh-bar-wrap">
+        <div class="refresh-bar-wrap"
+             title="Tempo al prossimo aggiornamento automatico. Modifica l'intervallo in Impostazioni → Preferenze.">
           <div id="refresh-bar"></div>
         </div>
         <div class="now-footer">
@@ -895,13 +896,15 @@ function renderTimeline() {
   if (end)   end.textContent   = fmt(sessionResetTs) + ' ↺';
 }
 
-const DISPLAY_REFRESH_MS = 60_000;  // il display si ricarica sempre ogni 60s
-
+// La barra refresh ora segue l'intervallo impostato nelle Impostazioni
+// (pollIntervalMs). Si riempie da 0% a 100% e quando arriva in fondo
+// il display recupera dati freschi e riparte da 0.
 function renderRefreshBar() {
   const bar = document.getElementById('refresh-bar');
   if (!bar) return;
-  const elapsed = Date.now() - lastLoadTs;
-  const pct = Math.min(100, (elapsed / DISPLAY_REFRESH_MS) * 100);
+  const interval = Math.max(10_000, pollIntervalMs || 60_000);
+  const elapsed  = Date.now() - lastLoadTs;
+  const pct      = Math.min(100, (elapsed / interval) * 100);
   bar.style.width = pct + '%';
   bar.style.background = pct > 85 ? 'var(--amber)' : 'var(--cyan)';
 }
@@ -1177,7 +1180,11 @@ async function loadData() {
       // L'orario salvato è già passato → ne ricaviamo uno nuovo a +5h
       sessionResetTs = Math.floor(Date.now() / 1000) + 5 * 3600;
     }
-    pollIntervalMs = (settings.poll_interval || 60) * 1000;
+    const newMs = (settings.poll_interval || 60) * 1000;
+    if (newMs !== pollIntervalMs) {
+      pollIntervalMs = newMs;
+      scheduleRefresh();  // riallinea il timer se il setting è cambiato altrove
+    }
   } catch (e) {
     console.error('loadData:fetch', e);
   }
@@ -1191,11 +1198,12 @@ async function loadData() {
   return okFetch;
 }
 
-// Display refresh timer: setInterval unico, indipendente da qualsiasi errore.
-// Parte al boot e non viene mai stoppato.
-function scheduleRefresh(_secs) {
-  if (refreshTimer) return;  // già attivo
-  refreshTimer = setInterval(loadData, DISPLAY_REFRESH_MS);
+// Display refresh timer: setInterval allineato al poll_interval scelto.
+// Va ricreato quando l'utente cambia il setting.
+function scheduleRefresh() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  const interval = Math.max(10_000, pollIntervalMs || 60_000);
+  refreshTimer = setInterval(loadData, interval);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1383,7 +1391,8 @@ async function nowRefresh() {
     const data = await res.json().catch(() => ({}));
     await loadData();
     if (data.refreshed === false && data.next_poll_in > 0) {
-      // Rate limited: mostra conto alla rovescia
+      // Backend in cool-down verso Claude.ai (evita rate-limit Anthropic).
+      // I dati mostrati sono comunque gli ultimi disponibili.
       let secs = data.next_poll_in;
       btn.classList.remove('loading');
       const tick = () => {
@@ -1391,7 +1400,8 @@ async function nowRefresh() {
           btn.innerHTML = '<span class="spin-icon">⟳</span> AGGIORNA';
           return;
         }
-        btn.innerHTML = `✓ Già aggiornato — prossimo tra ${secs}s`;
+        btn.innerHTML = `⏱ Claude interrogabile tra ${secs}s`;
+        btn.title = 'Per evitare rate-limit, il backend aspetta prima di richiamare Claude. I dati mostrati sono già aggiornati.';
         secs--;
         setTimeout(tick, 1000);
       };
@@ -1454,19 +1464,20 @@ async function forcePoll() {
 function updatePollInfo(pi) {
   const piLabel = pi >= 1800 ? '30 min' : pi >= 600 ? '10 min' : pi >= 300 ? '5 min' : pi >= 120 ? '2 min' : '1 min';
   setText('poll-info',
-    `Il backend chiede nuovi dati a Claude ogni ${piLabel}. ` +
-    `Il display si aggiorna sempre ogni 60s con gli ultimi dati disponibili.`);
+    `Il display recupera nuovi dati ogni ${piLabel}. ` +
+    `La barra sotto il grafico mostra il countdown al prossimo aggiornamento.`);
 }
 
 async function savePollInterval() {
   const v = parseInt(document.getElementById('poll-interval').value);
   pollIntervalMs = v * 1000;
   updatePollInfo(v);
+  lastLoadTs = Date.now();  // reset barra subito
+  scheduleRefresh();         // ricrea timer con il nuovo intervallo
   await fetch('/api/settings', {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ poll_interval: v }),
   });
-  // L'intervallo di refresh del display è già attivo (60s fisso)
 }
 
 async function changeTheme(theme) {
