@@ -511,7 +511,7 @@ body { background: var(--bg); color: var(--text); }
         <div class="box-title">SETTIMANALE · TUTTI I MODELLI</div>
         <div class="weekly-pct-row">
           <span id="weekly-big" class="weekly-big">—</span>
-          <span class="weekly-unit">rimasto</span>
+          <span class="weekly-unit">utilizzato</span>
         </div>
         <div class="slim-bar">
           <div id="weekly-fill" class="slim-fill" style="width:0%;background:var(--green)"></div>
@@ -568,7 +568,7 @@ body { background: var(--bg); color: var(--text); }
     <div class="crediti-col">
       <div class="box-title">SALDO DISPONIBILE</div>
       <div id="cr-balance" class="crediti-balance">—</div>
-      <div style="margin-top:18px">
+      <div id="cr-reset-block" style="margin-top:18px;display:none">
         <div class="box-title">PROSSIMO RESET CREDITI</div>
         <div id="cr-reset" class="crediti-reset-label">—</div>
       </div>
@@ -613,6 +613,12 @@ body { background: var(--bg); color: var(--text); }
         ↑ Aggiorna Adesso
       </button>
       <div id="update-log"></div>
+
+      <!-- Esci dal Kiosk (in fondo alla colonna sinistra) -->
+      <button id="kiosk-exit-btn" class="btn-secondary" style="margin-top:auto"
+              onclick="exitKiosk()" title="Chiude il browser kiosk per accedere al desktop">
+        ⊞ &nbsp;Esci dal Kiosk
+      </button>
     </div>
 
     <!-- Colonna destra -->
@@ -620,7 +626,7 @@ body { background: var(--bg); color: var(--text); }
       <div class="settings-title">PREFERENZE</div>
 
       <div class="field">
-        <label>Aggiornamento automatico (poll OAuth)</label>
+        <label>Quanto spesso richiedere nuovi dati a Claude</label>
         <select id="poll-interval" onchange="savePollInterval()">
           <option value="60" selected>1 minuto</option>
           <option value="120">2 minuti</option>
@@ -654,12 +660,6 @@ body { background: var(--bg); color: var(--text); }
         <strong>Accedi da PC o telefono:</strong><br>
         <strong id="server-url">http://raspberrypi.local:8080</strong>
       </div>
-
-      <!-- Controllo Kiosk -->
-      <button id="kiosk-exit-btn" class="btn-secondary"
-              onclick="exitKiosk()" title="Chiude il browser kiosk per accedere al desktop">
-        ⊞ &nbsp;Esci dal Kiosk
-      </button>
 
       <!-- Info button -->
       <button class="btn-info" onclick="openInfo()" style="margin-top:auto">
@@ -822,14 +822,15 @@ const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
 (function startClock() {
   const clk  = document.getElementById('clock');
   const date = document.getElementById('date');
+  function safe(fn) { try { fn(); } catch(e) { console.error('tick:', e); } }
   function tick() {
     const now = new Date();
-    clk.textContent  = now.toLocaleTimeString('it-IT');
-    date.textContent = now.toLocaleDateString('it-IT',
-      { weekday:'short', day:'numeric', month:'short' });
-    renderCountdown(now);
-    renderTimeline();
-    renderRefreshBar();
+    safe(() => { clk.textContent  = now.toLocaleTimeString('it-IT'); });
+    safe(() => { date.textContent = now.toLocaleDateString('it-IT',
+      { weekday:'short', day:'numeric', month:'short' }); });
+    safe(() => renderCountdown(now));
+    safe(() => renderTimeline());
+    safe(() => renderRefreshBar());
   }
   tick();
   setInterval(tick, 1000);
@@ -839,8 +840,15 @@ function renderCountdown(now) {
   const el = document.getElementById('countdown');
   if (!el) return;
   if (!sessionResetTs) {
-    el.textContent = 'in attesa dati…';
-    el.className = '';
+    // Se la sessione è al 100% mostriamo un messaggio coerente
+    const pctUsed = (DATA.account || {}).session_pct_used;
+    if (pctUsed != null && pctUsed >= 99) {
+      el.textContent = 'Limite raggiunto · attesa reset';
+      el.className = 'low';
+    } else {
+      el.textContent = 'in attesa dati…';
+      el.className = '';
+    }
     return;
   }
   const secs = sessionResetTs - Math.floor(now.getTime() / 1000);
@@ -1125,7 +1133,14 @@ async function loadData() {
     ]);
     DATA = { account, settings, session };
     sessionHistory = Array.isArray(history) ? history : [];
-    sessionResetTs = account.session_resets_at_ts || account.reset_at_ts || null;
+    // Preserva l'ultimo timestamp conosciuto: a sessione 100% l'API spesso non lo restituisce
+    const newResetTs = account.session_resets_at_ts || account.reset_at_ts;
+    if (newResetTs) {
+      sessionResetTs = newResetTs;
+    } else if (sessionResetTs && Date.now() / 1000 > sessionResetTs) {
+      // L'orario salvato è già passato → ne ricaviamo uno nuovo a +5h
+      sessionResetTs = Math.floor(Date.now() / 1000) + 5 * 3600;
+    }
     pollIntervalMs = (settings.poll_interval || 60) * 1000;
     lastLoadTs     = Date.now();
     applyTheme(settings.theme || 'blue');
@@ -1199,7 +1214,7 @@ function renderNow() {
   if (wPct != null) {
     const wRemain = acc.weekly_pct_remaining ?? (100 - wPct);
     const wColor  = wPct < 50 ? 'var(--green)' : wPct < 75 ? 'var(--amber)' : 'var(--red)';
-    setText('weekly-big',  wRemain + '%');
+    setText('weekly-big',  wPct + '%');
     setStyle('weekly-big',  'color', wColor);
     setStyle('weekly-fill', 'width', wPct + '%');
     setStyle('weekly-fill', 'background', wColor);
@@ -1211,8 +1226,8 @@ function renderNow() {
       weeklyLabel = `${days[d.getDay()]} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
     }
     setText('weekly-meta', weeklyLabel
-      ? `Reset: ${weeklyLabel} · ${wPct}% utilizzato`
-      : `${wPct}% utilizzato`);
+      ? `${wRemain}% rimasto · Reset: ${weeklyLabel}`
+      : `${wRemain}% rimasto`);
   } else {
     setText('weekly-big',  '—');
     setText('weekly-meta', 'Accedi per vedere i limiti settimanali');
@@ -1246,11 +1261,14 @@ function renderCrediti() {
   const reset = acc.credits_reset_label;
   const nodata= document.getElementById('cr-nodata');
 
+  const resetBlock = document.getElementById('cr-reset-block');
+
   if (spent == null && limit == null && bal == null) {
     nodata.style.display = '';
     setText('cr-spent','—'); setText('cr-limit','');
     setText('cr-balance','—'); setText('cr-reset','—');
     setStyle('cr-fill','width','0%'); setText('cr-pct','');
+    if (resetBlock) resetBlock.style.display = 'none';
     return;
   }
   nodata.style.display = 'none';
@@ -1264,7 +1282,13 @@ function renderCrediti() {
     setText('cr-pct', `${pct}% utilizzato`);
   } else { setStyle('cr-fill','width','0%'); setText('cr-pct',''); }
   setText('cr-balance', bal != null ? fmtEur(bal) : '—');
-  setText('cr-reset',   reset || '—');
+  // Mostra il blocco reset SOLO se abbiamo il dato
+  if (reset) {
+    setText('cr-reset', reset);
+    if (resetBlock) resetBlock.style.display = '';
+  } else {
+    if (resetBlock) resetBlock.style.display = 'none';
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -1301,8 +1325,7 @@ function renderSettings() {
 
   const pi = cfg.poll_interval || 60;
   document.getElementById('poll-interval').value = String(pi);
-  const piLabel = pi >= 1800 ? '30 min' : pi >= 600 ? '10 min' : pi >= 300 ? '5 min' : pi >= 120 ? '2 min' : '1 min';
-  setText('poll-info', `Display: ogni 60s · Dati Claude: ogni ${piLabel}`);
+  updatePollInfo(pi);
   document.querySelectorAll('.theme-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'blue')));
   const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
@@ -1390,9 +1413,17 @@ async function forcePoll() {
   }
 }
 
+function updatePollInfo(pi) {
+  const piLabel = pi >= 1800 ? '30 min' : pi >= 600 ? '10 min' : pi >= 300 ? '5 min' : pi >= 120 ? '2 min' : '1 min';
+  setText('poll-info',
+    `Il backend chiede nuovi dati a Claude ogni ${piLabel}. ` +
+    `Il display si aggiorna sempre ogni 60s con gli ultimi dati disponibili.`);
+}
+
 async function savePollInterval() {
   const v = parseInt(document.getElementById('poll-interval').value);
   pollIntervalMs = v * 1000;
+  updatePollInfo(v);
   await fetch('/api/settings', {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ poll_interval: v }),
