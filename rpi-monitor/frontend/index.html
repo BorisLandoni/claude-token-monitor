@@ -157,12 +157,6 @@ body { background: var(--bg); color: var(--text); }
   border-radius:6px;
 }
 
-/* Optional boxes (design / routine) */
-.extra-box {
-  background:var(--surface); border:1px solid var(--border);
-  border-radius:9px; padding:8px 12px; flex-shrink:0;
-}
-
 /* Aggiorna button */
 #now-refresh-btn {
   width:100%; padding:12px 0; font-size:15px; font-weight:700;
@@ -533,34 +527,6 @@ body { background: var(--bg); color: var(--text); }
       <div class="sparkline-big-section">
         <div class="sp-label">UTILIZZO SESSIONE · 24 ORE</div>
         <canvas id="sparkline"></canvas>
-      </div>
-
-      <!-- Claude Design (opzionale) -->
-      <div class="extra-box" id="design-box" style="display:none">
-        <div class="box-title">CLAUDE DESIGN</div>
-        <div class="weekly-pct-row">
-          <span id="design-big" class="weekly-big" style="color:var(--violet)">—</span>
-          <span class="weekly-unit">rimasto</span>
-        </div>
-        <div class="slim-bar">
-          <div id="design-fill" class="slim-fill" style="width:0%;background:var(--violet)"></div>
-        </div>
-        <div id="design-meta" class="weekly-meta">—</div>
-      </div>
-
-      <!-- Routine giornaliere (opzionale) -->
-      <div class="extra-box" id="routine-box" style="display:none">
-        <div class="box-title">ROUTINE GIORNALIERE</div>
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
-          <span id="routine-used"
-            style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;
-                   color:var(--cyan)">—</span>
-          <span id="routine-limit" style="font-size:12px;color:var(--muted)">/ —</span>
-          <span id="routine-meta" style="font-size:10px;color:var(--muted);margin-left:auto">—</span>
-        </div>
-        <div class="slim-bar">
-          <div id="routine-fill" class="slim-fill" style="width:0%;background:var(--cyan)"></div>
-        </div>
       </div>
 
       <!-- Pulsante Aggiorna -->
@@ -1250,40 +1216,6 @@ function renderNow() {
   } else {
     setText('weekly-big',  '—');
     setText('weekly-meta', 'Accedi per vedere i limiti settimanali');
-  }
-
-  // Claude Design
-  const designBox = document.getElementById('design-box');
-  if (acc.design_pct_used != null) {
-    designBox.style.display = '';
-    const dPct    = acc.design_pct_used;
-    const dRemain = acc.design_pct_remaining ?? (100 - dPct);
-    const dColor  = dPct < 50 ? 'var(--violet)' : dPct < 75 ? 'var(--amber)' : 'var(--red)';
-    setText('design-big',  dRemain + '%');
-    setStyle('design-big',  'color', dColor);
-    setStyle('design-fill', 'width', dPct + '%');
-    setStyle('design-fill', 'background', dColor);
-    setText('design-meta', `${dPct}% utilizzato`);
-  } else {
-    designBox.style.display = 'none';
-  }
-
-  // Routine
-  const routineBox = document.getElementById('routine-box');
-  if (acc.routines_limit != null) {
-    routineBox.style.display = '';
-    const rUsed  = acc.routines_used ?? 0;
-    const rLimit = acc.routines_limit;
-    const rPct   = Math.min(100, Math.round(rUsed / rLimit * 100));
-    const rColor = rPct > 75 ? 'var(--red)' : rPct > 50 ? 'var(--amber)' : 'var(--cyan)';
-    setText('routine-used',  rUsed);
-    setText('routine-limit', '/ ' + rLimit);
-    setText('routine-meta',  rUsed === 0 ? 'Nessuna usata' : `${rPct}%`);
-    setStyle('routine-fill', 'width', rPct + '%');
-    setStyle('routine-fill', 'background', rColor);
-    setStyle('routine-used', 'color', rColor);
-  } else {
-    routineBox.style.display = 'none';
   }
 
   // Footer status
