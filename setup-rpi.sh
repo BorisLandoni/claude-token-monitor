@@ -249,7 +249,7 @@ CALIB_CONF
 fi
 
 # ── 11. Kiosk Chromium (modalità display) ────────────────────
-step "Configurazione Chromium kiosk (opzionale)..."
+step "Configurazione Chromium kiosk con auto-restart..."
 
 # RPi OS Bookworm usa "chromium"; Bullseye usa "chromium-browser"
 if command -v chromium &>/dev/null; then
@@ -263,17 +263,36 @@ fi
 
 AUTOSTART_DIR="$HOME/.config/autostart"
 AUTOSTART_FILE="$AUTOSTART_DIR/claude-monitor-kiosk.desktop"
+KIOSK_SCRIPT="$INSTALL_DIR/start-kiosk.sh"
+
+# Script wrapper con loop di restart: se Chromium muore, riparte dopo 3s
+cat > "$KIOSK_SCRIPT" <<EOF
+#!/usr/bin/env bash
+# Aspetta che il backend sia pronto
+sleep 10
+while true; do
+    DISPLAY=:0 $BROWSER_BIN \\
+        --kiosk --noerrdialogs --disable-infobars \\
+        --no-first-run --disable-session-crashed-bubble \\
+        --disable-translate --overscroll-history-navigation=0 \\
+        --window-size=800,480 \\
+        http://localhost:$PORT
+    sleep 3
+done
+EOF
+chmod +x "$KIOSK_SCRIPT"
 
 mkdir -p "$AUTOSTART_DIR"
 cat > "$AUTOSTART_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Claude Monitor Kiosk
-Exec=bash -c 'sleep 10 && DISPLAY=:0 $BROWSER_BIN --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble --disable-translate --overscroll-history-navigation=0 --window-size=800,480 http://localhost:$PORT'
+Exec=bash $KIOSK_SCRIPT
 X-GNOME-Autostart-enabled=true
 EOF
-ok "Kiosk configurato in $AUTOSTART_FILE (browser: $BROWSER_BIN)"
-echo "    (Il browser si aprirà in modalità kiosk al prossimo avvio del desktop)"
+ok "Kiosk configurato con auto-restart (browser: $BROWSER_BIN)"
+echo "    Script: $KIOSK_SCRIPT"
+echo "    (Il browser si aprirà in kiosk al prossimo avvio e si rilancerà se chiuso)"
 
 # ── 12. Firewall: porta 8080 ──────────────────────────────────
 if command -v ufw &>/dev/null; then
