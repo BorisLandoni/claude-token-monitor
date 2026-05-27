@@ -94,8 +94,8 @@ def process_account_limits(limits: dict):
         # Weekly limits
         'weekly_pct_used':      limits.get('weekly_pct_used'),
         'weekly_pct_remaining': limits.get('weekly_pct_remaining'),
-        'weekly_resets_label':  limits.get('weekly_resets_label'),
-        'weekly_resets_at_ts':  store.to_unix_ts(limits.get('weekly_resets_at')),
+        'weekly_resets_label':  _keep('weekly_resets_label'),
+        'weekly_resets_at_ts':  limits.get('weekly_resets_at_ts') or _keep('weekly_resets_at_ts'),
         # Claude Design limits (DOM scrape only — preserved across fast polls)
         'design_pct_used':      _keep('design_pct_used'),
         'design_pct_remaining': _keep('design_pct_remaining'),

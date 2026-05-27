@@ -1183,8 +1183,15 @@ function renderNow() {
     setStyle('weekly-big',  'color', wColor);
     setStyle('weekly-fill', 'width', wPct + '%');
     setStyle('weekly-fill', 'background', wColor);
-    setText('weekly-meta', acc.weekly_resets_label
-      ? `Reset: ${acc.weekly_resets_label} · ${wPct}% utilizzato`
+    // Fallback: se label non c'è ma c'è il timestamp, ricava giorno+ora lato client
+    let weeklyLabel = acc.weekly_resets_label;
+    if (!weeklyLabel && acc.weekly_resets_at_ts) {
+      const d = new Date(acc.weekly_resets_at_ts * 1000);
+      const days = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+      weeklyLabel = `${days[d.getDay()]} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    }
+    setText('weekly-meta', weeklyLabel
+      ? `Reset: ${weeklyLabel} · ${wPct}% utilizzato`
       : `${wPct}% utilizzato`);
   } else {
     setText('weekly-big',  '—');

@@ -472,15 +472,16 @@ class ClaudeClient:
                 out['weekly_pct_used']      = wpct
                 out['weekly_pct_remaining'] = 100 - wpct
             if sd.get('resets_at'):
-                out['weekly_resets_at_ts'] = self._iso_to_ts(sd['resets_at'])
-                # Etichetta "Sab 17:59" in italiano
-                try:
-                    import datetime as _dt
-                    d = _dt.datetime.fromtimestamp(out['weekly_resets_at_ts'])
-                    days_it = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
-                    out['weekly_resets_label'] = f"{days_it[d.weekday()]} {d.strftime('%H:%M')}"
-                except Exception:
-                    pass
+                ts = self._iso_to_ts(sd['resets_at'])
+                if ts is not None:
+                    out['weekly_resets_at_ts'] = ts
+                    try:
+                        import datetime as _dt
+                        d = _dt.datetime.fromtimestamp(ts)
+                        days_it = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+                        out['weekly_resets_label'] = f"{days_it[d.weekday()]} {d.strftime('%H:%M')}"
+                    except Exception:
+                        pass
 
             # Crediti (extra_usage, in centesimi EUR)
             eu = data.get('extra_usage') or {}
