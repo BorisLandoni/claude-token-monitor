@@ -153,9 +153,29 @@ body { background: var(--bg); color: var(--text); }
 .sp-label { font-size:10px; font-weight:700; letter-spacing:2px;
             color:var(--muted); margin-bottom:4px; flex-shrink:0; }
 #sparkline {
-  display:block; width:100%; flex:1; min-height:80px;
+  display:block; width:100%; flex:1; min-height:70px;
   border-radius:6px;
 }
+
+/* Controlli sotto sparkline: window selector + slider */
+.sparkline-controls {
+  display:flex; gap:6px; align-items:center; flex-shrink:0;
+  margin-top:2px;
+}
+.sp-win-btn {
+  padding:3px 8px; font-size:10px; font-weight:700; letter-spacing:.5px;
+  background:var(--surface); border:1px solid var(--border);
+  color:var(--muted); border-radius:5px; cursor:pointer;
+  transition:color .15s, border-color .15s;
+}
+.sp-win-btn:hover  { color:var(--text); }
+.sp-win-btn.active { color:var(--cyan); border-color:var(--cyan); }
+#sp-scroll {
+  flex:1; height:4px; cursor:pointer;
+  accent-color: var(--cyan);
+  margin:0 4px;
+}
+#sp-scroll:disabled { opacity:.3; cursor:not-allowed; }
 
 /* Aggiorna button */
 #now-refresh-btn {
@@ -525,8 +545,18 @@ body { background: var(--bg); color: var(--text); }
 
       <!-- Sparkline grande -->
       <div class="sparkline-big-section">
-        <div class="sp-label">UTILIZZO SESSIONE · 24 ORE</div>
+        <div class="sp-label" id="sp-label">UTILIZZO SESSIONE · 24 ORE</div>
         <canvas id="sparkline"></canvas>
+      </div>
+
+      <!-- Controlli zoom/scroll grafico -->
+      <div class="sparkline-controls">
+        <button class="sp-win-btn"        data-win="4"  onclick="setSparkWindow(4)">4h</button>
+        <button class="sp-win-btn"        data-win="12" onclick="setSparkWindow(12)">12h</button>
+        <button class="sp-win-btn active" data-win="24" onclick="setSparkWindow(24)">24h</button>
+        <input type="range" id="sp-scroll" min="0" max="100" value="100"
+               oninput="setSparkScroll(this.value)"
+               title="Scorri nel tempo: sinistra = più vecchio, destra = più recente">
       </div>
 
       <!-- Pulsante Aggiorna -->
@@ -816,6 +846,9 @@ let alertDismissTs = 0;
 let lastLoadTs     = Date.now();
 let pollIntervalMs = 60_000;
 const ALERT_COOLDOWN_MS = 5 * 60 * 1000;
+// Stato sparkline (zoom/scroll)
+let sparkWindowH   = 24;   // ore visibili: 4, 12 o 24
+let sparkScrollPct = 100;  // 0 = oldest, 100 = most recent (default)
 
 /* ════════════════════════════════════════════════════════════════════════════
    CLOCK
@@ -961,30 +994,55 @@ function drawSparkline() {
   const PAD_BOT = 18;
   const chartH  = H - PAD_TOP - PAD_BOT;
 
-  // Asse temporale: finestra fissa 24h
-  const nowTs   = Math.floor(Date.now() / 1000);
-  const startTs = nowTs - 86_400;
-  const xOf = ts => ((ts - startTs) / 86_400) * W;
+  // ── Calcolo finestra temporale (dinamica + scroll) ────────────────────────
+  const nowTs       = Math.floor(Date.now() / 1000);
+  const windowSecs  = sparkWindowH * 3600;
+  // Inizio dati disponibili: primo sample o, in mancanza, windowSecs fa
+  const dataStart   = sessionHistory.length ? sessionHistory[0].ts : (nowTs - windowSecs);
+  const dataEnd     = nowTs;
+  const totalSpan   = Math.max(0, dataEnd - dataStart);
+  // Se i dati coprono meno della finestra → mostra tutto, no scroll
+  const canScroll   = totalSpan > windowSecs;
+  let viewEnd, viewStart;
+  if (canScroll) {
+    // Scroll 100 = view più recente, 0 = view più vecchia
+    const scrollRange = totalSpan - windowSecs;
+    viewStart = dataStart + scrollRange * (sparkScrollPct / 100);
+    viewEnd   = viewStart + windowSecs;
+  } else {
+    // Tutto visibile: la view parte dal primo dato (o lascia spazio se < windowSecs)
+    viewStart = Math.min(dataStart, nowTs - windowSecs);
+    viewEnd   = nowTs;
+  }
+  const viewSpan = viewEnd - viewStart;
+
+  // Stato slider (abilitato solo se serve)
+  const scrollEl = document.getElementById('sp-scroll');
+  if (scrollEl) scrollEl.disabled = !canScroll;
+
+  const xOf = ts => ((ts - viewStart) / viewSpan) * W;
   const yOf = pct => PAD_TOP + (1 - pct / 100) * chartH;
 
-  // Filtra ultime 24h + downsample
+  // Filtra punti dentro la view + downsample
   const pts = _downsample(
-    sessionHistory.filter(p => p.ts >= startTs),
+    sessionHistory.filter(p => p.ts >= viewStart && p.ts <= viewEnd),
     288
   );
 
-  // ── Griglia verticale: una linea per ora ─────────────────────────────────
-  // Trova prima ora piena dopo startTs
-  const startDate = new Date(startTs * 1000);
+  // ── Griglia verticale: una linea per ora (densità in base alla finestra) ─
+  const startDate = new Date(viewStart * 1000);
   startDate.setMinutes(0, 0, 0);
   startDate.setHours(startDate.getHours() + 1);
+  // Per finestre piccole etichette più dense
+  const labelEveryH = sparkWindowH <= 4 ? 1 : sparkWindowH <= 12 ? 2 : 3;
+  const majorEveryH = sparkWindowH <= 4 ? 2 : sparkWindowH <= 12 ? 6 : 6;
 
-  for (let t = startDate.getTime(); t <= Date.now(); t += 3_600_000) {
+  for (let t = startDate.getTime(); t <= viewEnd * 1000; t += 3_600_000) {
     const hh      = new Date(t).getHours();
-    const isMajor = hh === 0 || hh === 6 || hh === 12 || hh === 18;
+    const isMajor = hh % majorEveryH === 0;
     const x       = Math.round(xOf(t / 1000)) + 0.5;
+    if (x < 0 || x > W) continue;
 
-    // Linea verticale
     ctx.strokeStyle = isMajor ? cBorder : cBorder + '55';
     ctx.lineWidth   = isMajor ? 1 : 0.5;
     ctx.setLineDash(isMajor ? [] : [2, 4]);
@@ -994,8 +1052,7 @@ function drawSparkline() {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Etichetta ora (ogni 2h, sempre le major)
-    if (isMajor || hh % 2 === 0) {
+    if (isMajor || hh % labelEveryH === 0) {
       ctx.fillStyle    = isMajor ? cMuted : cMuted + '88';
       ctx.font         = isMajor ? 'bold 9px system-ui' : '9px system-ui';
       ctx.textAlign    = 'center';
@@ -1004,37 +1061,37 @@ function drawSparkline() {
     }
   }
 
-  // ── Marker reset sessione: rilevati dai cali nei dati storici ────────────
-  // La sessione Claude parte al primo messaggio dopo un reset e dura 5h da lì,
-  // NON ogni 5h fisse. Quindi rileviamo i reset come cali bruschi della %.
-  // Usiamo i dati grezzi (non downsamplati) per maggior precisione.
-  const cGreen = style.getPropertyValue('--green').trim();
-  const rawPts = sessionHistory.filter(p => p.ts >= startTs);
-  const resetMarkers = [];
-  for (let i = 1; i < rawPts.length; i++) {
-    const prev = rawPts[i - 1].pct;
-    const curr = rawPts[i].pct;
-    // Calo > 30 punti % in un singolo intervallo = reset sessione
-    if (prev - curr > 30 && prev > 25) {
-      resetMarkers.push(rawPts[i].ts);
+  // ── Marker reset sessione: ancorati a sessionResetTs, step ±5h ───────────
+  // sessionResetTs è il PROSSIMO reset noto (es. 23:50). Da lì proiettiamo
+  // a ritroso (e in avanti) ogni 5h finché restiamo nella finestra visibile.
+  if (sessionResetTs) {
+    const cGreen = style.getPropertyValue('--green').trim();
+    const SESSION = 5 * 3600;
+    // Marker più recente dentro la view
+    let t0 = sessionResetTs;
+    while (t0 - SESSION >= viewStart) t0 -= SESSION;
+    // Disegna avanzando ogni 5h finché siamo dentro la view
+    for (let t = t0; t <= viewEnd; t += SESSION) {
+      if (t < viewStart) continue;
+      const x = Math.round(xOf(t)) + 0.5;
+      ctx.strokeStyle = cGreen;
+      ctx.lineWidth   = 1.2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, PAD_TOP);
+      ctx.lineTo(x, H - PAD_BOT);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Etichetta: passato = "↺ reset", futuro = "↺ prossimo"
+      const isFuture = t > nowTs;
+      ctx.fillStyle    = cGreen;
+      ctx.font         = 'bold 9px system-ui';
+      ctx.textAlign    = x > W - 50 ? 'right' : 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(isFuture ? '↺ prossimo' : '↺ reset',
+                   x + (x > W - 50 ? -3 : 3), PAD_TOP);
     }
   }
-  resetMarkers.forEach(t => {
-    const x = Math.round(xOf(t)) + 0.5;
-    ctx.strokeStyle = cGreen;
-    ctx.lineWidth   = 1.2;
-    ctx.setLineDash([4, 3]);
-    ctx.beginPath();
-    ctx.moveTo(x, PAD_TOP);
-    ctx.lineTo(x, H - PAD_BOT);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle    = cGreen;
-    ctx.font         = 'bold 9px system-ui';
-    ctx.textAlign    = x > W - 30 ? 'right' : 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('↺ reset', x + (x > W - 30 ? -3 : 3), PAD_TOP);
-  });
 
   // Baseline
   ctx.strokeStyle = cBorder;
@@ -1066,7 +1123,7 @@ function drawSparkline() {
     return;
   }
 
-  const pts2    = pts.length === 1 ? [{ ts: startTs + 43200, pct: pts[0].pct }, pts[0]] : pts;
+  const pts2    = pts.length === 1 ? [{ ts: viewStart + viewSpan/2, pct: pts[0].pct }, pts[0]] : pts;
   const lastPct = pts2[pts2.length - 1].pct;
   const cLine   = style.getPropertyValue(lastPct < 50 ? '--cyan' : lastPct < 75 ? '--amber' : '--red').trim();
 
@@ -1114,6 +1171,21 @@ function drawSparkline() {
     ctx.textBaseline = 'bottom';
     ctx.fillText('Accumulo dati — in attesa del 2° punto…', W / 2, H - PAD_BOT - 3);
   }
+}
+
+function setSparkWindow(h) {
+  sparkWindowH = h;
+  document.querySelectorAll('.sp-win-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.win) === h);
+  });
+  // Aggiorna label
+  setText('sp-label', `UTILIZZO SESSIONE · ${h === 24 ? '24 ORE' : h + ' ORE'}`);
+  drawSparkline();
+}
+
+function setSparkScroll(v) {
+  sparkScrollPct = parseInt(v);
+  drawSparkline();
 }
 
 function hexToRgba(color, alpha) {
