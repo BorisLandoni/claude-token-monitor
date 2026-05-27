@@ -497,23 +497,55 @@ async def run_update():
     if not d:
         return {'ok': False, 'reason': 'Directory di installazione non trovata'}
 
-    _update_log = ['Aggiornamento da GitHub...\n']
+    _update_log = [f'Aggiornamento da GitHub (dir: {d})...\n']
     _update_running = True
+
+    def _git(args, timeout=120):
+        """Esegue git con env safe (no prompt credenziali) + timeout + log streaming."""
+        env = {
+            **os.environ,
+            'GIT_TERMINAL_PROMPT': '0',     # niente prompt interattivi
+            'GIT_ASKPASS':         'echo',  # fallback per password
+            'GCM_INTERACTIVE':     'never', # disabilita git-credential-manager
+        }
+        _update_log.append(f'\n$ git {" ".join(args)}\n')
+        proc = subprocess.Popen(
+            ['git', '-C', str(d), *args],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1, env=env,
+            stdin=subprocess.DEVNULL,
+        )
+        try:
+            for line in proc.stdout:
+                _update_log.append(line)
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            _update_log.append(f'\n[✗] timeout dopo {timeout}s\n')
+            return -1
+        return proc.returncode
 
     def _run():
         global _update_running
         try:
-            proc = subprocess.Popen(
-                ['git', '-C', str(d), 'pull'],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1,
+            # 1. Branch corrente
+            br_proc = subprocess.run(
+                ['git', '-C', str(d), 'rev-parse', '--abbrev-ref', 'HEAD'],
+                capture_output=True, text=True, timeout=10,
             )
-            for line in proc.stdout:
-                _update_log.append(line)
-            proc.wait()
-            if proc.returncode != 0:
-                _update_log.append(f'\n[✗] git pull fallito (codice {proc.returncode})\n')
+            branch = br_proc.stdout.strip() or 'main'
+            _update_log.append(f'Branch: {branch}\n')
+
+            # 2. Fetch (download, no merge)
+            if _git(['fetch', '--all', '--prune'], timeout=120) != 0:
+                _update_log.append('\n[✗] git fetch fallito\n')
                 return
+
+            # 3. Hard reset all'origin (sovrascrive qualsiasi modifica locale)
+            if _git(['reset', '--hard', f'origin/{branch}'], timeout=60) != 0:
+                _update_log.append('\n[✗] git reset fallito\n')
+                return
+
             _update_log.append('\n[✓] Codice aggiornato\n')
             _update_log.append('[→] Riavvio servizio + kiosk in background...\n')
             _update_log.append('[✓] Servizio riavviato con successo!\n')
