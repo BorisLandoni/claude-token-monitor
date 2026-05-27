@@ -1122,7 +1122,9 @@ async function loadData() {
 
 function scheduleRefresh(secs) {
   clearTimeout(refreshTimer);
-  refreshTimer = setTimeout(loadData, Math.max(60, secs) * 1000);
+  // Il display si aggiorna sempre ogni 60s (indipendente dall'intervallo di polling).
+  // Il backend fa il poll ogni 'secs' secondi, ma l'UI mostra comunque dati freschi.
+  refreshTimer = setTimeout(loadData, 60_000);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

@@ -30,7 +30,7 @@ CHROMIUM_PATH  = os.getenv('CHROMIUM_PATH', '')
 OAUTH_CREDENTIALS_FILE = Path.home() / '.claude' / '.credentials.json'
 OAUTH_USAGE_URL        = 'https://api.anthropic.com/api/oauth/usage'
 OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
-OAUTH_MIN_INTERVAL     = 58    # secondi minimi tra due chiamate OAuth
+OAUTH_MIN_INTERVAL     = 30    # secondi minimi tra due chiamate OAuth
 OAUTH_BACKOFF_429      = 180   # secondi di attesa dopo un 429
 
 # Candidate endpoints tried when polling (best candidates first)
@@ -473,12 +473,12 @@ class ClaudeClient:
                 out['weekly_pct_remaining'] = 100 - wpct
             if sd.get('resets_at'):
                 out['weekly_resets_at_ts'] = self._iso_to_ts(sd['resets_at'])
-                # Etichetta giorno settimana in italiano
+                # Etichetta "Sab 17:59" in italiano
                 try:
                     import datetime as _dt
                     d = _dt.datetime.fromtimestamp(out['weekly_resets_at_ts'])
                     days_it = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
-                    out['weekly_resets_label'] = days_it[d.weekday()]
+                    out['weekly_resets_label'] = f"{days_it[d.weekday()]} {d.strftime('%H:%M')}"
                 except Exception:
                     pass
 
