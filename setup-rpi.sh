@@ -251,6 +251,16 @@ fi
 # ── 11. Kiosk Chromium (modalità display) ────────────────────
 step "Configurazione Chromium kiosk (opzionale)..."
 
+# RPi OS Bookworm usa "chromium"; Bullseye usa "chromium-browser"
+if command -v chromium &>/dev/null; then
+    BROWSER_BIN="chromium"
+elif command -v chromium-browser &>/dev/null; then
+    BROWSER_BIN="chromium-browser"
+else
+    BROWSER_BIN="chromium"
+    warn "Chromium non trovato — installa con: sudo apt install chromium"
+fi
+
 AUTOSTART_DIR="$HOME/.config/autostart"
 AUTOSTART_FILE="$AUTOSTART_DIR/claude-monitor-kiosk.desktop"
 
@@ -259,10 +269,10 @@ cat > "$AUTOSTART_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Claude Monitor Kiosk
-Exec=bash -c 'sleep 5 && chromium-browser --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble --app=http://localhost:$PORT'
+Exec=bash -c 'sleep 10 && DISPLAY=:0 $BROWSER_BIN --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble --disable-translate --overscroll-history-navigation=0 --window-size=800,480 http://localhost:$PORT'
 X-GNOME-Autostart-enabled=true
 EOF
-ok "Kiosk configurato in $AUTOSTART_FILE"
+ok "Kiosk configurato in $AUTOSTART_FILE (browser: $BROWSER_BIN)"
 echo "    (Il browser si aprirà in modalità kiosk al prossimo avvio del desktop)"
 
 # ── 12. Firewall: porta 8080 ──────────────────────────────────

@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -26,6 +27,45 @@ _repo_frontend = Path(__file__).parent.parent / 'frontend'
 FRONTEND_DIR   = _repo_frontend if _repo_frontend.exists() else Path(__file__).parent
 
 client = ClaudeClient()
+
+# ── Version / Update ──────────────────────────────────────────────────────────
+
+VERSION_FILE = Path(__file__).parent.parent.parent / 'VERSION'
+GITHUB_VERSION_URL = (
+    'https://raw.githubusercontent.com/BorisLandoni/'
+    'claude-token-monitor/claude/rpi-token-monitor/VERSION'
+)
+
+
+def _get_current_version() -> str:
+    if VERSION_FILE.exists():
+        return VERSION_FILE.read_text().strip()
+    return 'unknown'
+
+
+def _get_install_dir() -> Optional[Path]:
+    candidates = [
+        Path.home() / 'claude-token-monitor',
+        Path(__file__).parent.parent.parent,
+    ]
+    for p in candidates:
+        if (p / '.git').exists():
+            return p
+    return None
+
+
+def _get_git_commit() -> str:
+    d = _get_install_dir()
+    if not d:
+        return 'unknown'
+    try:
+        r = subprocess.run(
+            ['git', '-C', str(d), 'rev-parse', '--short', 'HEAD'],
+            capture_output=True, text=True, timeout=5,
+        )
+        return r.stdout.strip() if r.returncode == 0 else 'unknown'
+    except Exception:
+        return 'unknown'
 
 
 # ── Account limits processing ─────────────────────────────────────────────────
@@ -398,6 +438,91 @@ def get_setup_log():
         'running': _setup_running,
         'log': ''.join(_setup_log),
         'available': _find_setup_script() is not None,
+    }
+
+
+# ── Version / Update endpoints ───────────────────────────────────────────────
+
+@app.get('/api/version')
+def get_version():
+    return {
+        'version': _get_current_version(),
+        'commit':  _get_git_commit(),
+        'install_dir': str(_get_install_dir()) if _get_install_dir() else None,
+    }
+
+
+@app.get('/api/version/check')
+async def check_version():
+    current = _get_current_version()
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(GITHUB_VERSION_URL)
+        latest = r.text.strip() if r.status_code == 200 else None
+    except Exception:
+        latest = None
+    up_to_date = (current == latest) if latest else None
+    return {
+        'current':          current,
+        'latest':           latest,
+        'up_to_date':       up_to_date,
+        'update_available': (not up_to_date) if (latest and up_to_date is not None) else None,
+    }
+
+
+_update_log: list = []
+_update_running: bool = False
+
+
+@app.post('/api/update')
+async def run_update():
+    global _update_running, _update_log
+    if _update_running:
+        return {'ok': False, 'reason': 'Aggiornamento già in corso'}
+    d = _get_install_dir()
+    if not d:
+        return {'ok': False, 'reason': 'Directory di installazione non trovata'}
+
+    _update_log = ['Aggiornamento da GitHub...\n']
+    _update_running = True
+
+    def _run():
+        global _update_running
+        try:
+            proc = subprocess.Popen(
+                ['git', '-C', str(d), 'pull'],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1,
+            )
+            for line in proc.stdout:
+                _update_log.append(line)
+            proc.wait()
+            if proc.returncode != 0:
+                _update_log.append(f'\n[✗] git pull fallito (codice {proc.returncode})\n')
+                return
+            _update_log.append('\n[✓] Codice aggiornato — riavvio servizio...\n')
+            r2 = subprocess.run(
+                ['sudo', 'systemctl', 'restart', 'claude-monitor'],
+                capture_output=True, text=True, timeout=30,
+            )
+            if r2.returncode == 0:
+                _update_log.append('[✓] Servizio riavviato con successo!\n')
+            else:
+                _update_log.append(f'[⚠] Riavvio: {r2.stderr.strip() or "ok"}\n')
+        except Exception as e:
+            _update_log.append(f'\n[✗] Errore: {e}\n')
+        finally:
+            _update_running = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {'ok': True}
+
+
+@app.get('/api/update/log')
+def get_update_log_ep():
+    return {
+        'running': _update_running,
+        'log':     ''.join(_update_log),
     }
 
 

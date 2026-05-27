@@ -278,6 +278,13 @@ body { background: var(--bg); color: var(--text); }
   max-height:100px; overflow-y:auto; white-space:pre-wrap;
   margin-top:8px; display:none;
 }
+#update-log {
+  background:var(--bg); border:1px solid var(--border2);
+  border-radius:6px; padding:8px;
+  font-family:monospace; font-size:10px; color:var(--green);
+  max-height:80px; overflow-y:auto; white-space:pre-wrap;
+  display:none;
+}
 
 /* ── Nav ──────────────────────────────────────────────────────────────────── */
 .nav-tab {
@@ -661,6 +668,23 @@ curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/c
           </div>
         </div>
       </details>
+
+      <!-- Aggiornamento Software -->
+      <div class="settings-title">VERSIONE SOFTWARE</div>
+      <div class="info-card" style="font-size:11px;line-height:1.8">
+        <span id="ver-current" style="color:var(--cyan);font-weight:700">—</span>
+        &nbsp;<span id="ver-commit" style="color:var(--muted);font-size:10px"></span>
+      </div>
+      <button id="check-update-btn" class="btn-secondary" onclick="checkForUpdate()">
+        ↑ Verifica Aggiornamenti
+      </button>
+      <div id="update-status" style="display:none;padding:8px;border-radius:6px;
+           font-size:11px;line-height:1.5;border:1px solid var(--border)"></div>
+      <button id="update-btn" class="btn-primary" style="display:none"
+              onclick="runUpdate()">
+        ↑ Aggiorna Adesso
+      </button>
+      <div id="update-log"></div>
 
       <!-- Info button -->
       <button class="btn-info" onclick="openInfo()" style="margin-top:auto">
@@ -1070,6 +1094,7 @@ function go(page) {
   document.querySelector(`.nav-tab[data-page="${page}"]`).classList.add('active');
   render();
   if (page === 'now') drawSparkline();
+  if (page === 'settings') loadVersionInfo();
 }
 
 function render() {
@@ -1466,10 +1491,101 @@ function setText(id, v)     { const e=document.getElementById(id); if(e) e.textC
 function setStyle(id, p, v) { const e=document.getElementById(id); if(e) e.style[p]=v; }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   VERSION / UPDATE
+   ════════════════════════════════════════════════════════════════════════ */
+async function loadVersionInfo() {
+  try {
+    const d = await fetch('/api/version').then(r => r.json());
+    setText('ver-current', 'v' + d.version);
+    setText('ver-commit', d.commit && d.commit !== 'unknown' ? `(${d.commit})` : '');
+  } catch(e) {}
+}
+
+async function checkForUpdate() {
+  const btn       = document.getElementById('check-update-btn');
+  const status    = document.getElementById('update-status');
+  const updateBtn = document.getElementById('update-btn');
+  btn.textContent = '⟳ Controllo…'; btn.disabled = true;
+  status.style.display = ''; status.textContent = 'Connessione a GitHub…';
+  status.style.color = 'var(--muted)'; status.style.background = 'var(--surface)';
+  status.style.border = '1px solid var(--border)';
+  updateBtn.style.display = 'none';
+  try {
+    const d = await fetch('/api/version/check').then(r => r.json());
+    if (d.update_available) {
+      status.style.background = 'rgba(255,176,48,.1)';
+      status.style.border = '1px solid var(--amber)';
+      status.style.color = 'var(--amber)';
+      status.textContent = `⬆ Nuova versione: v${d.latest}  (attuale: v${d.current})`;
+      updateBtn.style.display = '';
+    } else if (d.up_to_date) {
+      status.style.background = 'rgba(0,232,122,.1)';
+      status.style.border = '1px solid var(--green)';
+      status.style.color = 'var(--green)';
+      status.textContent = `✓ Software aggiornato (v${d.current})`;
+    } else {
+      status.textContent = 'Impossibile verificare la versione online';
+    }
+  } catch(e) {
+    status.textContent = '✗ Errore di rete';
+  } finally {
+    btn.textContent = '↑ Verifica Aggiornamenti'; btn.disabled = false;
+  }
+}
+
+let _updatePollTimer = null;
+
+async function runUpdate() {
+  const btn   = document.getElementById('update-btn');
+  const logEl = document.getElementById('update-log');
+  btn.disabled = true; btn.textContent = 'Aggiornamento…';
+  logEl.style.display = ''; logEl.textContent = 'Avvio…\n';
+  try {
+    const res  = await fetch('/api/update', { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) {
+      logEl.textContent = '✗ ' + data.reason;
+      btn.disabled = false; btn.textContent = '↑ Aggiorna Adesso';
+      return;
+    }
+    _updatePollTimer = setInterval(_pollUpdateLog, 1500);
+    _pollUpdateLog();
+  } catch(e) {
+    logEl.textContent = '✗ ' + e.message;
+    btn.disabled = false; btn.textContent = '↑ Aggiorna Adesso';
+  }
+}
+
+async function _pollUpdateLog() {
+  try {
+    const data  = await fetch('/api/update/log').then(r => r.json());
+    const logEl = document.getElementById('update-log');
+    const btn   = document.getElementById('update-btn');
+    const status= document.getElementById('update-status');
+    logEl.textContent = (data.log || '').replace(/\x1b\[[0-9;]*m/g, '');
+    logEl.scrollTop = logEl.scrollHeight;
+    if (!data.running) {
+      clearInterval(_updatePollTimer); _updatePollTimer = null;
+      btn.disabled = false;
+      const ok = data.log.includes('[✓] Servizio riavviato');
+      btn.textContent = ok ? '✓ Aggiornato!' : '↑ Riprova';
+      if (ok) {
+        status.style.background = 'rgba(0,232,122,.1)';
+        status.style.border = '1px solid var(--green)';
+        status.style.color = 'var(--green)';
+        status.textContent = '✓ Aggiornamento completato — ricarico tra 5s…';
+        setTimeout(() => location.reload(), 5000);
+      }
+    }
+  } catch(e) {}
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    BOOT
    ════════════════════════════════════════════════════════════════════════ */
 go('now');
 loadData();
+loadVersionInfo();
 </script>
 </body>
 </html>
