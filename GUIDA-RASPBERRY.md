@@ -227,8 +227,8 @@ Lo script fa automaticamente tutto:
 |---|---|
 | Installa dipendenze di sistema | `python3`, `chromium-browser`, `fonts-noto`, `xdotool`, `unclutter` |
 | Crea ambiente virtuale Python | In `rpi-monitor/backend/.venv` |
-| Installa pacchetti Python | FastAPI, uvicorn, Playwright, httpx, aiofiles |
-| Configura Playwright | Usa il Chromium di sistema (nessun download da 300 MB) |
+| Installa pacchetti Python | FastAPI, uvicorn, httpx |
+| Installa Claude Code CLI | Per OAuth automatico (`claude login`) |
 | Crea servizio systemd | `claude-monitor.service` — si avvia automaticamente al boot |
 | Configura kiosk Chromium | `claude-kiosk.desktop` in LXDE autostart |
 
@@ -244,51 +244,43 @@ Dopo il riavvio, il sistema si avvia automaticamente in modalità kiosk: sul dis
 
 ---
 
-## 7. Primo accesso a Claude.ai
+## 7. Primo accesso a Claude
 
-Il monitor deve accedere al tuo account Claude.ai per leggere i dati di utilizzo. L'accesso avviene **una sola volta**: le credenziali non vengono salvate, solo i cookie di sessione.
+L'autenticazione avviene via **OAuth di Claude Code** — nessun login con email/password, nessun cookie da copiare. Lo script `setup-rpi.sh` esegue `claude login` durante l'installazione, e da quel momento il monitor è autonomo: rinnova l'access token automaticamente quando scade, usando il `refresh_token` salvato in `~/.claude/.credentials.json`.
 
 ### 7.1 Apri la dashboard dal PC
 
-**Mentre il RPi è acceso e connesso alla stessa rete WiFi**, apri il browser sul tuo PC e vai su:
+Con il RPi acceso e connesso alla stessa LAN:
 
 ```
 http://raspberrypi.local:8080
 ```
 
-oppure, se il DNS mDNS non funziona, usa l'IP diretto:
+Oppure, se mDNS non funziona, usa l'IP diretto:
 
 ```
 http://192.168.1.XX:8080
 ```
 
-> La dashboard si apre anche dal telefono, connesso alla stessa rete WiFi.
+> La dashboard si apre anche dal telefono sulla stessa rete WiFi.
 
-### 7.2 Naviga in IMPOSTAZIONI
+### 7.2 Verifica i dati
 
-Sulla dashboard (lato PC o direttamente sul display touch):
+Dopo l'installazione, la pagina **ADESSO** dovrebbe mostrare:
+- Gauge sessione con la **% utilizzata** in grande e la **% rimasta** sotto
+- Countdown al reset (es. "Si ripristina tra 3h 38m · alle 12:00")
+- Box settimanale con % utilizzato + reset day/ora
+- Sparkline storica (vuota al primo boot, si popola entro qualche minuto)
 
-1. Tocca/clicca l'icona **≡ IMPOSTAZIONI** nella barra di navigazione in basso
-2. Trovi il form di login nella sezione superiore
+Se vedi "Token OAuth scaduto" o dati `—`:
 
-### 7.3 Inserisci le credenziali Claude.ai
-
-1. **Email**: la tua email di accesso a Claude.ai
-2. **Password**: la tua password Claude.ai
-3. Clicca **"ACCEDI"**
-
-Il processo di login richiede **30-60 secondi** (Playwright apre un browser headless, compila il form, naviga alla pagina Utilizzo e salva i cookie). Aspetta finché il pulsante non mostra "Connesso".
-
-> **Sicurezza**: l'email è salvata nelle impostazioni locali, la password viene usata solo durante il login e non viene mai memorizzata su disco. Solo i cookie di sessione vengono salvati in `rpi-monitor/backend/cookies.json`.
-
-### 7.4 Verifica i dati
-
-Dopo il login, la pagina **ADESSO** della dashboard dovrebbe mostrare:
-- L'arc gauge con la percentuale di utilizzo sessione (es. "77%")
-- Il countdown al reset (es. "Si ripristina tra 3h 38m")
-- I limiti settimanali (es. "Sab 17:59")
-
-Se i dati non appaiono subito, attendi il primo ciclo di polling (max 60 secondi) oppure clicca il pulsante **"Aggiorna ora"** nelle impostazioni.
+1. Vai in **Impostazioni** (icona ⚙ in basso)
+2. Premi **Riprova Connessione** → il backend tenta il refresh automatico
+3. Se anche il refresh fallisce (raro, solo dopo settimane di inattività), apri terminale SSH e fai:
+   ```bash
+   claude login
+   ```
+   Poi torna in dashboard e premi di nuovo **Riprova Connessione**.
 
 ---
 
@@ -361,7 +353,7 @@ curl http://localhost:8080/api/session | python3 -m json.tool
   "logged_in": true,
   "email": "tuaemail@example.com",
   "session_status": "ok",
-  "cookie_age_hours": 2.3
+  "plan": "pro"
 }
 ```
 
@@ -379,40 +371,51 @@ Nella pagina **IMPOSTAZIONI** della dashboard:
 
 | Opzione | Comportamento |
 |---|---|
-| 30 secondi | Polling frequente — più aggiornato, usa leggermente più risorse |
-| 1 minuto | **Default** — bilanciamento ideale |
-| 2 minuti | Risparmio risorse — indicato se il RPi fa anche altro |
-| 5 minuti | Polling minimo — dati aggiornati ogni 5 minuti |
+| 1 minuto | **Default** — display sempre fresco |
+| 2 minuti | Bilanciamento |
+| 5 minuti | Risparmio risorse |
+| 10 / 30 minuti | Polling minimo |
 
-> Il minimo assoluto è 30 secondi (hardcoded nel backend per evitare ban).
+> La barra sotto il grafico mostra il countdown al prossimo aggiornamento e si allinea automaticamente al valore scelto.
+> Il backend ha comunque un cool-down minimo verso Claude.ai (30s) per evitare rate-limit lato Anthropic.
 
 ### 9.2 Tema grafico
 
-Tre temi disponibili nella pagina IMPOSTAZIONI:
+Sei temi disponibili in IMPOSTAZIONI:
 
-| Tema | Sfondo | Uso consigliato |
-|---|---|---|
-| **Scuro** | `#07111C` | Default — ottimo in ambienti con poca luce |
-| **Blu** | `#030D18` | Variante più profonda |
-| **Viola** | `#0C0718` | Alternativa calda |
+| Tema | Tipo |
+|---|---|
+| **Blu** | Scuro, default |
+| **Grigio** | Grigio scuro neutro, alto contrasto |
+| **Viola** | Scuro caldo |
+| **Chiaro** | Bianco/giallo paglierino |
+| **Verde** | Scuro verde militare |
+| **Ambra** | Scuro ambra/terminal |
 
 Il tema viene salvato automaticamente.
 
-### 9.3 Cambio credenziali Claude.ai
+### 9.3 Rinnovo connessione Claude
 
-Se cambi la password Claude.ai o vuoi disconnetterti:
+Quando vedi **⚠ Token OAuth scaduto** in Impostazioni:
 
-**Via dashboard** → IMPOSTAZIONI → clicca **"Disconnetti"**, poi inserisci le nuove credenziali.
+1. Premi **Riprova Connessione** → tenta refresh automatico via `refresh_token`
+2. Se fallisce, SSH al RPi ed esegui:
+   ```bash
+   claude login
+   ```
+3. Torna in dashboard, **Riprova Connessione**
 
-**Via API**:
-```bash
-curl -X POST http://localhost:8080/api/logout
-```
+### 9.4 Aggiornamento OTA dal display
 
-Poi riesegui il login dalla dashboard.
+In IMPOSTAZIONI:
+1. **Verifica Aggiornamenti** → confronta versione locale e GitHub
+2. Se disponibile, appare **Aggiorna Adesso**
+3. Il backend fa `git fetch + git reset --hard origin/<branch>` e riavvia il servizio + kiosk
+4. La dashboard ricarica da sola dopo qualche secondo
 
-### 9.4 Forzare un aggiornamento immediato
+### 9.5 Forzare un aggiornamento dati immediato
 
+Premi **AGGIORNA** sulla pagina ADESSO, o via API:
 ```bash
 curl -X POST http://localhost:8080/api/poll
 ```
@@ -461,19 +464,25 @@ Per aggiornare il software all'ultima versione:
 ```bash
 cd ~/claude-token-monitor
 
-# Ferma il servizio
-sudo systemctl stop claude-monitor
+### Da v1.3+: aggiornamento OTA dal display
 
-# Aggiorna il codice
-git pull
+In **Impostazioni → Verifica Aggiornamenti → Aggiorna Adesso**. Il backend fa `git fetch` + `git reset --hard origin/<branch>`, riavvia il servizio + kiosk, e la dashboard ricarica.
 
-# Aggiorna i pacchetti Python
+### Aggiornamento manuale via SSH
+
+```bash
+cd ~/claude-token-monitor
+
+# Sovrascrive eventuali modifiche locali, evita merge conflict
+git fetch && git reset --hard origin/$(git rev-parse --abbrev-ref HEAD)
+
+# Aggiorna pacchetti Python se requirements.txt è cambiato
 source rpi-monitor/backend/.venv/bin/activate
 pip install -r rpi-monitor/backend/requirements.txt --upgrade
 deactivate
 
 # Riavvia
-sudo systemctl start claude-monitor
+sudo systemctl restart claude-monitor
 ```
 
 ---
@@ -506,23 +515,25 @@ sudo systemctl start claude-monitor
 3. **Verifica il servizio**: `systemctl status claude-monitor` — deve essere `active (running)`
 4. **Controlla la porta**: `ss -tlnp | grep 8080`
 
-### Errore "Accesso fallito" durante il login
+### "Token OAuth scaduto" persistente
 
-1. **Controlla email e password**: prova ad accedere manualmente su claude.ai
-2. **Autenticazione a due fattori**: se hai 2FA attivo su Claude.ai, il login automatico non funziona — devi disabilitarlo temporaneamente
-3. **Chromium non trovato**: `which chromium-browser` — deve rispondere con un percorso
-4. **Playwright deps mancanti**: riinstalla le dipendenze
+Il refresh automatico tramite `refresh_token` di solito risolve da solo. Se rimane scaduto:
+
+1. **Riprova Connessione** in Impostazioni: tenta refresh + retry
+2. Se fallisce, via SSH:
    ```bash
-   source ~/claude-token-monitor/rpi-monitor/backend/.venv/bin/activate
-   playwright install-deps chromium
+   claude login
+   sudo systemctl restart claude-monitor
    ```
+3. Verifica che `claude` CLI sia installato: `which claude`
+4. Controlla `~/.claude/.credentials.json` — deve contenere `claudeAiOauth.refreshToken`
 
 ### La dashboard mostra "Nessun dato"
 
-1. **Esegui il login** dalla pagina IMPOSTAZIONI (vedi sezione 7)
-2. **Verifica lo stato**: `curl http://localhost:8080/api/session`
-3. **Forza un aggiornamento**: `curl -X POST http://localhost:8080/api/poll`
-4. **Controlla i log**: `journalctl -u claude-monitor -n 50`
+1. **Verifica login OAuth**: `cat ~/.claude/.credentials.json | python3 -m json.tool | grep -i token`
+2. **Stato auth**: `curl http://localhost:8080/api/session`
+3. **Forza poll**: `curl -X POST http://localhost:8080/api/poll`
+4. **Log**: `journalctl -u claude-monitor -n 50` — cerca righe `[oauth]`
 
 ### Il servizio crasha al boot
 
@@ -535,13 +546,14 @@ Errori comuni:
 - `ModuleNotFoundError`: il venv non è attivato correttamente → riinstalla con `bash rpi-monitor/setup/install.sh`
 - `Port already in use`: un'altra istanza è già in esecuzione → `sudo systemctl stop claude-monitor`; `sudo pkill -f server.py`; `sudo systemctl start claude-monitor`
 
-### I dati non si aggiornano (sessione scaduta)
+### I dati non si aggiornano
 
-I cookie di sessione di Claude.ai durano circa 7-30 giorni. Quando scadono, la dashboard mostra "Sessione scaduta". Soluzione:
+L'access token OAuth dura circa 1 ora ma viene **rinnovato automaticamente** dal backend tramite `refresh_token`. Se nonostante questo non vedi aggiornamenti:
 
-1. Vai su IMPOSTAZIONI nella dashboard
-2. Clicca **"Disconnetti"**
-3. Reinserisci email e password → clicca **"ACCEDI"**
+1. Controlla che il poll sia attivo: barra refresh sotto il grafico dovrebbe scorrere
+2. Verifica log: `journalctl -u claude-monitor -f` — cerca `[oauth]` e `[account]`
+3. Forza poll manuale: bottone **AGGIORNA** in dashboard, o `curl -X POST http://localhost:8080/api/poll`
+4. Se vedi `429 rate limit`: il backend aspetta 180s prima di riprovare, comportamento normale
 
 ### Controllare la RAM disponibile
 
@@ -556,12 +568,12 @@ Su RPi 4 2GB ci aspettiamo ~800 MB liberi a riposo con il kiosk attivo.
 ## Architettura in sintesi
 
 ```
-Claude.ai (web/mobile/VS Code/Desktop)
-       │  uso normale — zero token consumati
+Claude.ai (web/mobile/VS Code/Claude Code)
+       │  uso normale — zero token consumati dal monitor
        ▼
-  claude.ai/settings > Utilizzo
-       │  ◄─── polling automatico ogni 60 s
-       │        (Playwright + httpx + cookie di sessione)
+  Anthropic OAuth Usage API (gratuita)
+       │  GET /api/oauth/usage ~1s
+       │  refresh_token automatico
        ▼
 ┌─────────────────────────────┐
 │  RPi 4  ·  FastAPI  :8080   │
@@ -570,20 +582,20 @@ Claude.ai (web/mobile/VS Code/Desktop)
                │
                ▼
     Chromium kiosk 800×480
-    Dashboard touch (5 pagine)
-    ┌─────────┬────────┬──────────┬────────────┬───────────────┐
-    │  ADESSO │  ORA   │  GIORNO  │  SETTIMANA │  IMPOSTAZIONI │
-    └─────────┴────────┴──────────┴────────────┴───────────────┘
+    Dashboard touch (3 pagine)
+    ┌─────────┬──────────┬───────────────┐
+    │  ADESSO │  CREDITI │  IMPOSTAZIONI │
+    └─────────┴──────────┴───────────────┘
 ```
 
 ---
 
 ## Sicurezza e privacy
 
-- **Nessuna chiamata alle API Anthropic a pagamento**: il polling usa i cookie di sessione del browser, proprio come fa claude.ai
-- **Le credenziali non vengono salvate**: solo i cookie sono memorizzati in `cookies.json` (locale sul RPi)
-- **Nessun dato inviato a server esterni**: tutto rimane sulla rete locale
-- **Accesso alla dashboard**: chiunque sulla stessa rete WiFi può vedere la dashboard — se vuoi restringere l'accesso, configura un firewall o usa solo la rete locale domestica
+- **Endpoint OAuth gratuito**: nessun token a pagamento consumato dal monitor
+- **Token solo locale**: `~/.claude/.credentials.json` resta sul dispositivo — non viene mai inviato a server esterni
+- **Nessun cookie/password**: l'auth è esclusivamente OAuth via Claude Code
+- **Accesso alla dashboard non protetto**: chiunque sulla stessa LAN può vederla — usare in reti private
 
 ---
 

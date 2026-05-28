@@ -1,34 +1,31 @@
 # Claude Token Monitor
 
-Monitor l'utilizzo del tuo account Claude.ai — percentuale sessione, countdown reset e limiti settimanali — su un **Raspberry Pi con display touch 5"**, senza consumare un singolo token.
+Dashboard fisica per Raspberry Pi che monitora in tempo reale l'utilizzo del tuo account Claude.ai — % sessione 5 ore, % settimanale, crediti, storico 24 ore — **senza consumare un singolo token**.
 
 ---
 
 ## Come funziona
 
 ```
-Claude.ai (web / desktop / mobile / VS Code)
+Claude.ai (web / desktop / mobile / VS Code / Claude Code)
        │
-       │  uso normale — zero token consumati
+       │  uso normale — zero token consumati dal monitor
        ▼
-  Anthropic OAuth API  +  claude.ai DOM scrape (opzionale)
-       │  polling automatico ogni 60 s
-       │
-       │  Strategia a due livelli:
-       │  1. OAuth token Claude Code  (~1 s)   ← PRIMARIO
-       │  2. Cookie sessionKey + DOM scrape    ← opzionale, per crediti/design
+  Anthropic OAuth Usage API (gratuita)
+       │  GET /api/oauth/usage  ·  ~1 secondo
+       │  refresh_token automatico quando il token scade
        ▼
-+---------------------------------+
-|  Raspberry Pi 4  · FastAPI :8080 |
-|  rpi-monitor/backend/server.py  |
-+---------------------------------+
-                 |
++-----------------------------------+
+|  Raspberry Pi  ·  FastAPI :8080   |
+|  rpi-monitor/backend/server.py    |
++-----------------------------------+
+                 │
                  ▼
       Chromium kiosk 800x480
-      Dashboard touch — 5 pagine
+      Dashboard touch — 3 pagine
 ```
 
-Il monitor usa l'**OAuth token di Claude Code** (salvato in `~/.claude/.credentials.json`) per chiamare l'endpoint `https://api.anthropic.com/api/oauth/usage`. Nessun login, nessun Playwright per l'auth, nessun Cloudflare. Il token si rinnova automaticamente finché Claude Code è installato.
+Il monitor legge l'**OAuth token di Claude Code** da `~/.claude/.credentials.json` e chiama `https://api.anthropic.com/api/oauth/usage`. Quando l'access token scade, il backend usa il `refresh_token` per rinnovarlo **automaticamente**, senza interazione utente — finché il refresh_token rimane valido (settimane). Solo quando anche quello scade serve un `claude login` manuale via SSH.
 
 ---
 
@@ -40,46 +37,46 @@ Il monitor usa l'**OAuth token di Claude Code** (salvato in `~/.claude/.credenti
 | Display touch HDMI | [5" 800×480 capacitivo (Futuranet)](https://futuranet.it/prodotto/display-touch-screen-5-800x480-pixel/) | €59 |
 | MicroSD | 16 GB Classe 10 (Samsung/SanDisk Endurance) | ~€8 |
 | Alimentatore | USB-C 27W / 5.1V 3A ufficiale RPi | ~€12 |
-| Cavo micro-HDMI -> HDMI | incluso con il display o separato | — |
+| Cavo micro-HDMI → HDMI | incluso col display o separato | — |
 
-> **RPi 4 2 GB** è il target principale: dashboard 800×480 fluida.
-> **RPi 3B+** funziona ma la RAM è più stretta.
+> **RPi 4 2 GB** è il target principale: dashboard fluida.
+> **RPi 3B+** funziona, ma è più lento al boot di Chromium.
 
 ---
 
 ## Installazione rapida (Raspberry Pi)
 
 ```bash
-# Scarica ed esegui lo script di setup automatico
 curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/main/setup-rpi.sh | bash
 ```
 
-Lo script fa tutto da solo:
+Lo script:
 1. Installa Node.js, Python, dipendenze di sistema
 2. Installa **Claude Code** (`claude` CLI)
-3. Avvia **`claude login`** — accedi una volta col browser
+3. Esegue `claude login` — autenticazione one-shot da browser
 4. Clona il repository
-5. Crea l'ambiente Python + installa Playwright
+5. Crea l'ambiente Python
 6. Crea e avvia il servizio **systemd** (autostart al boot)
-7. Configura **Chromium in modalità kiosk** (si apre sul display all'avvio)
+7. Configura **Chromium in modalità kiosk** sul display
 
 Dopo il setup:
 - Dashboard locale: `http://localhost:8080`
-- Da PC/telefono sulla stessa rete: `http://<IP-del-rpi>:8080`
+- Da PC/telefono sulla stessa LAN: `http://<IP-del-rpi>:8080`
 
-Per la guida completa passo-passo (flash SD, WiFi, SSH, risoluzione problemi) → [GUIDA-RASPBERRY.md](GUIDA-RASPBERRY.md)
+Guida passo-passo completa (flash SD, WiFi, SSH, troubleshooting) → [GUIDA-RASPBERRY.md](GUIDA-RASPBERRY.md)
 
 ---
 
-## Installazione su Windows (simulazione/sviluppo)
+## Sviluppo / simulazione su Windows o macOS
 
+```bash
+python rpi-monitor/backend/simulate.py
+# poi apri http://localhost:8080
 ```
-start-windows.bat
-```
 
-Il bat installa le dipendenze Python, avvia il backend e apre il browser su `http://localhost:8080`.
+`simulate.py` genera dati finti realistici (% sessione che avanza nel tempo, 24h di storico con pattern giornaliero) **senza connettersi a Claude.ai**. Utile per sviluppo UI e test.
 
-**Prerequisito:** [Claude Code](https://claude.ai/download) installato e loggato (`claude login` fatto almeno una volta).
+Per testare con dati reali su Windows, basta avere [Claude Code](https://claude.ai/download) installato e loggato, poi lanciare `python rpi-monitor/backend/server.py`.
 
 ---
 
@@ -87,97 +84,163 @@ Il bat installa le dipendenze Python, avvia il backend e apre il browser su `htt
 
 ```
 claude-token-monitor/
-├── setup-rpi.sh              Script di setup automatico per Raspberry Pi
-├── start-windows.bat         Avvio rapido su Windows
+├── VERSION                       Versione corrente (es. 1.4.3)
+├── setup-rpi.sh                  Script di setup automatico RPi
 ├── rpi-monitor/
 │   ├── backend/
-│   │   ├── server.py         FastAPI (porta 8080) + background poll loop
-│   │   ├── claude_client.py  OAuth token + cookie import + DOM scraping
-│   │   ├── store.py          Store in RAM + persistenza data.json
+│   │   ├── server.py             FastAPI + background poll loop + OTA update
+│   │   ├── claude_client.py      OAuth poll + refresh automatico
+│   │   ├── store.py              Storage in RAM + persistenza data.json
+│   │   ├── simulate.py           Server di simulazione (dati finti)
 │   │   └── requirements.txt
 │   └── frontend/
-│       └── index.html        SPA 800x480 touch (5 pagine, gauge, sparkline)
-└── GUIDA-RASPBERRY.md        Guida completa per RPi
+│       └── index.html            SPA 800x480 touch (gauge, sparkline, settings)
+├── README.md
+└── GUIDA-RASPBERRY.md            Guida passo-passo per RPi
 ```
 
 ---
 
 ## Dashboard
 
-| Pagina | Contenuto |
-|---|---|
-| **ADESSO** | Arc gauge sessione corrente (%), countdown reset, limiti settimanali, crediti spesi |
-| **ORA** | Sparkline costo ultime 24 h, token in/out per fascia oraria |
-| **GIORNO** | Grafico ultimi 7 giorni |
-| **SETTIMANA** | Grafico ultime 4 settimane |
-| **IMPOST.** | Stato auth OAuth/cookie, import cookie opzionale, tema, intervallo polling |
+Tre pagine, navigazione touch in basso.
 
-### Temi disponibili
+### ADESSO
+- **Gauge sessione**: arco circolare con % utilizzato in grande, % rimasto sotto.
+- **Countdown reset**: tempo al prossimo reset della finestra 5h, con orario esatto.
+- **Timeline sessione**: barra orizzontale che mostra dove sei nelle 5h correnti.
+- **Box settimanale**: % utilizzata grande + % rimasto + giorno/ora del prossimo reset settimanale.
+- **Sparkline storica**: grafico utilizzo nelle ultime ore con:
+  - Selettore finestra: **4h / 12h / 24h**
+  - Slider per scorrere nel tempo (passato + futuro fino al prossimo reset)
+  - Linee orarie + etichetta giorno (es. `gio 00h`) ai cambi di data
+  - Marker `↺` verde solo sui **reset reali osservati** dal backend (no proiezioni)
+  - Indicatore "ora corrente" (pallino ciano)
+- **Barra refresh**: countdown al prossimo aggiornamento automatico (durata = setting in Impostazioni).
+- **Bottone Aggiorna**: forza un poll immediato; rispetta il cool-down anti-rate-limit di Anthropic.
 
-| Tema | Sfondo | Uso consigliato |
-|---|---|---|
-| **Scuro** | `#07111C` | Default — ambienti con poca luce |
-| **Blu** | `#030D18` | Variante più profonda |
-| **Viola** | `#0C0718` | Alternativa calda |
+### CREDITI
+- Spesa mensile in € (importo + barra + % utilizzato)
+- Saldo disponibile in €
+- Prossimo reset crediti (visibile solo se l'API lo fornisce)
+
+### IMPOSTAZIONI
+- **Stato OAuth Claude Code** (attivo / scaduto)
+- **Riprova Connessione**: tenta refresh automatico via `refresh_token`. Solo se fallisce, mostra istruzioni per `claude login` manuale.
+- **Cancella sessione locale**: pulisce eventuali cookie locali (conferma a 2 step).
+- **Versione software + Verifica aggiornamenti**: aggiornamento OTA da GitHub direttamente dall'UI (vedi sotto).
+- **Esci dal Kiosk**: chiude Chromium per accedere al desktop (conferma a 2 step).
+- **Quanto spesso richiedere nuovi dati a Claude**: 1 / 2 / 5 / 10 / 30 minuti.
+- **Tema colore**: 6 temi (Blu, Grigio, Viola, Chiaro, Verde, Ambra).
+- **URL accesso da PC/telefono**: visualizzato a schermo.
+
+---
+
+## Aggiornamento OTA dall'UI
+
+Da v1.3.x in poi:
+1. **Impostazioni → Verifica Aggiornamenti**: confronta `VERSION` locale con quella su GitHub.
+2. Se c'è una nuova versione, appare **Aggiorna Adesso**.
+3. Il backend esegue in sequenza:
+   - `git fetch --all --prune` (timeout 120s)
+   - `git reset --hard origin/<branch>` (sovrascrive modifiche locali, no merge conflict)
+   - `sudo systemctl restart claude-monitor` + `pkill chromium` (reload pulito del kiosk)
+4. Toast verde a schermo + reload automatico della UI dopo 5s.
+
+Variabili d'ambiente git impostate per evitare blocchi: `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, `GIT_ASKPASS=echo`.
+
+In alternativa (manuale via SSH):
+```bash
+cd ~/claude-token-monitor
+git fetch && git reset --hard origin/<branch>
+sudo systemctl restart claude-monitor
+```
 
 ---
 
 ## Autenticazione
 
-### Primaria — OAuth Claude Code (automatica)
+### OAuth Claude Code (unico metodo supportato)
 
-Il monitor legge `~/.claude/.credentials.json` (creato da Claude Code dopo il login) e chiama:
+Il monitor legge `~/.claude/.credentials.json` creato da Claude Code:
 
+```json
+{
+  "claudeAiOauth": {
+    "accessToken":  "sk-ant-oat...",
+    "refreshToken": "sk-ant-ort...",
+    "expiresAt":    1234567890000
+  }
+}
+```
+
+Chiama:
 ```
 GET https://api.anthropic.com/api/oauth/usage
-Authorization: Bearer <token>
+Authorization: Bearer <accessToken>
 anthropic-beta: oauth-2025-04-20
 ```
 
-Ritorna: % sessione (5h), % settimanale (7d), timestamp reset, crediti spesi.
+Restituisce: % sessione (5h), % settimanale (7d), reset timestamps, crediti spesi, plan.
 
-Il token viene rinnovato automaticamente da Claude Code — nessun intervento richiesto.
+**Auto-refresh**: alla prima 401, il backend chiama `https://console.anthropic.com/v1/oauth/token` con `grant_type=refresh_token` per ottenere un nuovo `accessToken` (e lo riscrive nel file), poi ritenta. Trasparente per l'utente.
 
-### Opzionale — Cookie sessionKey (per dati extra)
+---
 
-Se vuoi vedere anche **Claude Design %** e **routine giornaliere**, puoi importare i cookie di sessione da Chrome:
+## Persistenza reset sessione
 
-1. Apri `IMPOST.` nella dashboard
-2. Espandi "Importa cookie da Chrome"
-3. Incolla il blocco cURL copiato da DevTools → Network → `copy as cURL`
+Il backend traccia gli shift di `session_resets_at_ts`: quando il valore cambia significativamente (>30 min), registra `(new_value − 5h)` come momento reale del reset in `data.json`.
 
-I cookie vengono usati solo per il DOM scrape di `claude.ai/settings/utilizzo`.
+Conseguenze:
+- I marker `↺` sul grafico riflettono i **veri** reset (non proiezioni).
+- I reset accumulati sopravvivono ai riavvii del servizio.
+- Cleanup automatico oltre i 7 giorni.
+
+Al primo install non c'è storico, quindi vedi solo il marker del **prossimo** reset (che è dato esplicito dell'API). Man mano che i reset avvengono, vengono memorizzati e iniziano ad apparire anche quelli passati.
 
 ---
 
 ## API REST
 
-Il backend espone un'API REST sulla porta 8080.
+Backend sulla porta 8080.
 
 | Metodo | Endpoint | Descrizione |
 |---|---|---|
-| `GET` | `/api/account` | Percentuali sessione/settimanale, reset timer, crediti |
-| `GET` | `/api/session` | Stato OAuth, stato cookie, email |
-| `POST` | `/api/poll` | Forza un poll immediato |
-| `POST` | `/api/import-cookies` | Importa cookie da testo cURL |
-| `POST` | `/api/logout` | Cancella cookie e dati account |
-| `GET` | `/api/settings` | Legge `poll_interval`, `theme` |
-| `PUT` | `/api/settings` | Aggiorna impostazioni |
-| `GET` | `/health` | Health check |
+| `GET`  | `/api/account` | Snapshot sessione + settimanale + crediti |
+| `GET`  | `/api/account/history` | Campioni % sessione (ultime 24h) |
+| `GET`  | `/api/account/resets` | Timestamp Unix dei reset osservati (ultimi 7 giorni) |
+| `GET`  | `/api/session` | Stato OAuth, email, logged_in |
+| `POST` | `/api/poll` | Forza poll immediato (con refresh automatico se serve) |
+| `POST` | `/api/logout` | Cancella eventuali cookie locali |
+| `GET`  | `/api/settings` | Legge `poll_interval`, `theme` |
+| `PUT`  | `/api/settings` | Aggiorna impostazioni |
+| `GET`  | `/api/version` | Versione corrente + commit |
+| `GET`  | `/api/version/check` | Confronta con GitHub |
+| `POST` | `/api/update` | Avvia aggiornamento OTA |
+| `GET`  | `/api/update/log` | Log streaming dell'update |
+| `POST` | `/api/login/start` | Avvia `claude login` (fallback se refresh fallisce) |
+| `GET`  | `/api/login/status` | Stato login |
+| `POST` | `/api/login/cancel` | Annulla login in corso |
+| `POST` | `/api/kiosk/exit` | Chiude Chromium |
+| `POST` | `/api/restart` | Riavvia il servizio |
+| `GET`  | `/health` | Health check |
 
-#### Esempi curl
+### Esempi
 
 ```bash
 # Stato account
 curl http://raspberrypi.local:8080/api/account | python3 -m json.tool
 
-# Forza aggiornamento immediato
+# Forza poll (rispetta cool-down)
 curl -X POST http://raspberrypi.local:8080/api/poll
 
-# Cambia intervallo di polling a 2 minuti
+# Cambia intervallo a 5 minuti
 curl -X PUT http://raspberrypi.local:8080/api/settings \
   -H 'Content-Type: application/json' \
-  -d '{"poll_interval":120}'
+  -d '{"poll_interval":300}'
+
+# Reset registrati
+curl http://raspberrypi.local:8080/api/account/resets
 ```
 
 ---
@@ -187,28 +250,19 @@ curl -X PUT http://raspberrypi.local:8080/api/settings \
 ```bash
 sudo systemctl status claude-monitor      # stato
 sudo systemctl restart claude-monitor     # riavvio
-sudo journalctl -u claude-monitor -f      # log in tempo reale
+sudo journalctl -u claude-monitor -f      # log live
 sudo journalctl -u claude-monitor -n 100  # ultimi 100 log
-```
-
-### Aggiornamento
-
-```bash
-cd ~/claude-token-monitor
-git pull
-sudo systemctl restart claude-monitor
 ```
 
 ---
 
 ## Sicurezza e privacy
 
-- **Nessuna API Anthropic a pagamento**: l'endpoint OAuth è gratuito e non consuma token
-- **Nessuna password mai memorizzata**: l'auth usa il token OAuth di Claude Code
-- **Token locale**: `~/.claude/.credentials.json` rimane solo sul dispositivo
-- **Cookie opzionali**: salvati in `rpi-monitor/backend/cookies.json` solo se importati
-- **Nessun dato inviato a server esterni**: tutto rimane sulla rete locale
-- **Accesso dashboard non protetto**: usa in reti domestiche o private
+- **Endpoint OAuth gratuito**: nessun token a pagamento consumato dal monitor
+- **Token solo locale**: `~/.claude/.credentials.json` non lascia mai il dispositivo
+- **Nessun server esterno coinvolto**: tutto sulla LAN
+- **`data.json`**: contiene solo storico % uso + reset timestamps, nessuna credenziale
+- **Dashboard non protetta**: usare in reti private/domestiche
 
 ---
 
