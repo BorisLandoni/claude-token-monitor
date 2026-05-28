@@ -751,15 +751,20 @@ body { background: var(--bg); color: var(--text); }
   <div class="login-modal-box">
     <div class="login-modal-title">RINNOVA LOGIN CLAUDE</div>
     <div class="login-modal-sub">
-      Scansiona il QR con il telefono<br>e autenticati su claude.ai
+      Apri questo link sul telefono o sul PC<br>e autorizza l'accesso su claude.ai
     </div>
-    <div id="login-qr-wrap">
-      <span id="login-qr-spinner">⟳</span>
-    </div>
+    <a id="login-url-link" href="#" target="_blank" rel="noopener"
+       style="display:none;background:var(--cyan);color:#000;font-weight:700;
+              text-decoration:none;padding:14px 18px;border-radius:8px;
+              text-align:center;font-size:13px;word-break:break-all;
+              max-width:300px;line-height:1.4">
+      Apri link di autenticazione →
+    </a>
     <div id="login-modal-status" style="color:var(--muted)">Avvio autenticazione…</div>
     <div id="login-url-text"
          style="display:none;font-size:9px;color:var(--muted2);word-break:break-all;
-                text-align:center;max-width:290px;line-height:1.5"></div>
+                text-align:center;max-width:290px;line-height:1.5;
+                user-select:all;cursor:text"></div>
     <div style="display:flex;gap:8px;width:100%">
       <button class="btn-secondary" style="flex:1" onclick="closeLoginModal()">Annulla</button>
       <button id="login-done-btn" class="btn-primary" style="flex:1;display:none"
@@ -1798,9 +1803,9 @@ let _loginPollTimer = null;
 
 async function startClaudeLogin() {
   document.getElementById('login-modal').classList.add('show');
-  document.getElementById('login-qr-wrap').innerHTML = '<span id="login-qr-spinner" style="font-size:12px;color:var(--muted);animation:spin .7s linear infinite">⟳</span>';
+  document.getElementById('login-url-link').style.display = 'none';
   document.getElementById('login-modal-status').style.color = 'var(--muted)';
-  document.getElementById('login-modal-status').textContent = 'Avvio autenticazione…';
+  document.getElementById('login-modal-status').textContent = '⟳ Avvio autenticazione…';
   document.getElementById('login-url-text').style.display = 'none';
   document.getElementById('login-done-btn').style.display = 'none';
 
@@ -1828,10 +1833,9 @@ async function startClaudeLogin() {
 }
 
 function _showLoginQr(url) {
-  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' +
-                encodeURIComponent(url) + '&bgcolor=0a1422&color=00c8ff&margin=8';
-  document.getElementById('login-qr-wrap').innerHTML =
-    `<img src="${qrUrl}" alt="QR Login" onerror="this.style.display='none'">`;
+  const link = document.getElementById('login-url-link');
+  link.href = url;
+  link.style.display = '';
   const urlEl = document.getElementById('login-url-text');
   urlEl.style.display = '';
   urlEl.textContent = url;
@@ -1859,11 +1863,11 @@ async function _pollLoginStatus() {
 }
 
 function _onLoginSuccess() {
-  document.getElementById('login-qr-wrap').innerHTML =
-    '<span style="font-size:40px">✓</span>';
+  document.getElementById('login-url-link').style.display = 'none';
+  document.getElementById('login-url-text').style.display = 'none';
   document.getElementById('login-modal-status').style.color = 'var(--green)';
-  document.getElementById('login-modal-status').textContent =
-    '✓ Login completato!';
+  document.getElementById('login-modal-status').innerHTML =
+    '<span style="font-size:32px;display:block;margin-bottom:6px">✓</span>Login completato!';
   document.getElementById('login-done-btn').style.display = '';
 }
 

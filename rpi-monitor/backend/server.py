@@ -295,26 +295,30 @@ def health():
 _login_url:    Optional[str] = None
 _login_status: str           = 'idle'   # idle|starting|waiting|success|error
 _login_proc                  = None
-_login_cred_mtime_before: Optional[float] = None
+_login_token_before: Optional[str] = None
 
 
-def _cred_mtime() -> Optional[float]:
+def _read_access_token() -> Optional[str]:
+    """Legge l'accessToken corrente da .credentials.json (None se assente)."""
     f = Path.home() / '.claude' / '.credentials.json'
     try:
-        return f.stat().st_mtime
+        import json as _json
+        data = _json.loads(f.read_text())
+        return (data.get('claudeAiOauth') or {}).get('accessToken')
     except Exception:
         return None
 
 
 @app.post('/api/login/start')
 async def start_claude_login():
-    global _login_url, _login_status, _login_proc, _login_cred_mtime_before
+    global _login_url, _login_status, _login_proc, _login_token_before
     if _login_status in ('waiting', 'starting'):
         return {'ok': True, 'url': _login_url, 'status': _login_status}
 
     _login_url = None
     _login_status = 'starting'
-    _login_cred_mtime_before = _cred_mtime()
+    # Confronto sul contenuto del token, non sul mtime (che cambia anche per refresh falliti)
+    _login_token_before = _read_access_token()
 
     def _run():
         global _login_url, _login_status, _login_proc
@@ -322,25 +326,40 @@ async def start_claude_login():
             env = os.environ.copy()
             env['TERM'] = 'dumb'
             env['NO_COLOR'] = '1'
+            # stdin=PIPE per poter rispondere a eventuali prompt interattivi
+            # (es. "Choose login method: 1) ...")
             _login_proc = subprocess.Popen(
                 ['claude', 'login'],
-                stdin=subprocess.DEVNULL,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, bufsize=1, env=env,
             )
+            # Risposta predefinita per il prompt di scelta metodo (1 = Claude Pro/Max)
+            try:
+                _login_proc.stdin.write('1\n')
+                _login_proc.stdin.flush()
+            except Exception:
+                pass
+
             for line in _login_proc.stdout:
                 print(f'[login] {line.rstrip()}')
-                m = _re.search(r'https?://\S{20,}', line)
-                if m:
-                    _login_url = m.group().rstrip('.,)')
+                # Cattura QUALSIASI URL (claude.ai, console.anthropic.com, ecc.)
+                m = _re.search(r'https?://[\w.-]+\.[a-z]{2,}\S*', line)
+                if m and not _login_url:
+                    _login_url = m.group().rstrip('.,)\'"')
                     _login_status = 'waiting'
-                if _cred_mtime() != _login_cred_mtime_before:
+                # Successo SOLO se il token cambia davvero (non basta mtime)
+                cur = _read_access_token()
+                if cur and cur != _login_token_before:
                     _login_status = 'success'
                     break
-            _login_proc.wait(timeout=300)
-            if _login_status not in ('success',):
-                new_mtime = _cred_mtime()
-                _login_status = 'success' if new_mtime != _login_cred_mtime_before else 'error'
+            try:
+                _login_proc.wait(timeout=300)
+            except Exception:
+                pass
+            if _login_status != 'success':
+                cur = _read_access_token()
+                _login_status = 'success' if (cur and cur != _login_token_before) else 'error'
         except Exception as e:
             _login_status = 'error'
             print(f'[login] errore: {e}')
