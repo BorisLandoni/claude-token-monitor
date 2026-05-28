@@ -1761,16 +1761,21 @@ async function autoRefreshLogin() {
     await loadData();
     const acc = DATA.account || {};
     if (acc.session_status === 'oauth_expired') {
-      // Refresh fallito → istruzioni manuali
+      // Refresh fallito → lancia `claude login` server-side e mostra QR/URL nel modal
       help.style.display = '';
       help.innerHTML =
         '<b style="color:var(--amber)">Refresh automatico fallito.</b><br>' +
-        'Il refresh_token è scaduto o revocato. Per riconnetterti:<br><br>' +
-        '<code style="background:var(--bg);padding:2px 6px;border-radius:4px">' +
-        'ssh pi@raspberrypi.local</code><br>' +
-        '<code style="background:var(--bg);padding:2px 6px;border-radius:4px">' +
-        'claude login</code><br><br>' +
-        'Poi torna qui e premi "Riprova Connessione".';
+        'Avvio nuova autenticazione…';
+      try {
+        await startClaudeLogin();
+        help.style.display = 'none';
+      } catch (e) {
+        help.innerHTML =
+          '<b style="color:var(--red)">✗ Avvio login fallito:</b> ' + (e.message || e) +
+          '<br><br>Fallback manuale: <code style="background:var(--bg);padding:2px 6px;' +
+          'border-radius:4px">ssh pi@raspberrypi.local</code> <code style="background:' +
+          'var(--bg);padding:2px 6px;border-radius:4px">claude login</code>';
+      }
     } else {
       // Refresh riuscito → resetta UI
       help.style.display = '';
