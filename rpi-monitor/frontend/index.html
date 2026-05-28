@@ -11,12 +11,12 @@ html, body { width: 800px; height: 480px; overflow: hidden;
              font-family: system-ui, -apple-system, sans-serif; }
 
 /* ── Themes ──────────────────────────────────────────────────────────────── */
-/* "Scuro" rinominato di fatto: grigio chiaro neutro con alto contrasto */
+/* Grigio: tonalità più scura e neutra, ben distinta da "Chiaro" */
 [data-theme="dark"] {
-  --bg: #F2F4F7; --surface: #FFFFFF; --surface2: #E6EAF0;
-  --border: #C4CCD6; --border2: #A0AAB8;
-  --text: #1A2230; --muted: #4F5B6E; --muted2: #768294;
-  --header-bg: #E0E4EC;
+  --bg: #2A2D33; --surface: #353A42; --surface2: #424852;
+  --border: #525964; --border2: #6B7280;
+  --text: #F0F2F5; --muted: #A8B0BC; --muted2: #808995;
+  --header-bg: #1F2227;
 }
 [data-theme="blue"] {
   --bg: #030D18; --surface: #0A1828; --surface2: #0D2038;
@@ -1085,11 +1085,11 @@ function drawSparkline() {
     ctx.lineTo(xn, H - PAD_BOT);
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle    = cCyan;
-    ctx.font         = 'bold 9px system-ui';
-    ctx.textAlign    = xn > W - 30 ? 'right' : 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('● ora', xn + (xn > W - 30 ? -3 : 3), PAD_TOP + 9);
+    // Solo pallino in cima alla linea (no testo: si confonde con ↺)
+    ctx.fillStyle = cCyan;
+    ctx.beginPath();
+    ctx.arc(xn, PAD_TOP + 3, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // ── Marker reset sessione: ancorati a sessionResetTs, step ±5h ───────────
@@ -1113,14 +1113,12 @@ function drawSparkline() {
       ctx.lineTo(x, H - PAD_BOT);
       ctx.stroke();
       ctx.setLineDash([]);
-      // Etichetta: passato = "↺ reset", futuro = "↺ prossimo"
-      const isFuture = t > nowTs;
+      // Solo il simbolo ↺ (niente testo: si sovrapponeva)
       ctx.fillStyle    = cGreen;
-      ctx.font         = 'bold 9px system-ui';
-      ctx.textAlign    = x > W - 50 ? 'right' : 'left';
+      ctx.font         = 'bold 11px system-ui';
+      ctx.textAlign    = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(isFuture ? '↺ prossimo' : '↺ reset',
-                   x + (x > W - 50 ? -3 : 3), PAD_TOP);
+      ctx.fillText('↺', x, PAD_TOP - 1);
     }
   }
 
