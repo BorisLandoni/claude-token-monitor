@@ -218,6 +218,41 @@ def get_account_resets():
     return store.get_reset_events()
 
 
+@app.post('/api/account/resets/rescan')
+def rescan_resets():
+    """Forza un rescan dei samples per ricostruire reset_events."""
+    before = len(store.reset_events)
+    store._backfill_resets_from_samples()
+    return {
+        'ok': True,
+        'before': before,
+        'after': len(store.reset_events),
+        'events': store.reset_events,
+    }
+
+
+@app.get('/api/debug/samples')
+def debug_samples():
+    """Debug: ultimi sample con timestamp leggibile per verificare drop %."""
+    import datetime as _dt
+    out = []
+    for s in store.samples[-200:]:
+        out.append({
+            'ts':   s['ts'],
+            'time': _dt.datetime.fromtimestamp(s['ts']).strftime('%H:%M:%S'),
+            'pct':  s['pct'],
+        })
+    return {
+        'count':        len(store.samples),
+        'shown':        len(out),
+        'samples':      out,
+        'reset_events': [
+            {'ts': t, 'time': _dt.datetime.fromtimestamp(t).strftime('%H:%M:%S')}
+            for t in store.reset_events
+        ],
+    }
+
+
 # ── Session ───────────────────────────────────────────────────────────────────
 
 @app.get('/api/session')

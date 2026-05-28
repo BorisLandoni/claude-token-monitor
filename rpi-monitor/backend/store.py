@@ -38,21 +38,37 @@ def load():
 def _backfill_resets_from_samples() -> None:
     """Scansiona i samples storici per ricostruire reset_events mancanti.
 
-    Ogni drop di >= 40 punti % tra due sample consecutivi (entro 15 min) è
-    un reset di sessione: lo aggiungiamo se non era già stato registrato."""
+    Algoritmo a finestra mobile: cerca un punto "alto" (>= 55%) seguito
+    entro 10 minuti da un punto "basso" (<= 25%). Il drop può essere
+    spalmato su più sample intermedi (95→70→40→10): cattura comunque
+    il reset, a differenza della semplice differenza fra coppie adiacenti."""
     global reset_events
-    if len(samples) < 2:
+    n = len(samples)
+    if n < 2:
         return
     added = 0
-    for i in range(1, len(samples)):
-        prev, cur = samples[i - 1], samples[i]
-        gap = cur['ts'] - prev['ts']
-        if 0 < gap <= 15 * 60 and (prev['pct'] - cur['pct']) >= 40:
-            t = prev['ts'] + max(1, gap // 2)
-            # Già presente entro 5 min?
-            if not any(abs(t - r) <= 300 for r in reset_events):
-                reset_events.append(t)
-                added += 1
+    WIN = 10 * 60  # finestra di 10 minuti
+    HIGH = 55      # soglia "prima del reset"
+    LOW  = 25      # soglia "dopo il reset"
+    i = 0
+    while i < n:
+        if samples[i]['pct'] >= HIGH:
+            # cerca un campione basso entro WIN secondi
+            j = i + 1
+            low_idx = None
+            while j < n and samples[j]['ts'] - samples[i]['ts'] <= WIN:
+                if samples[j]['pct'] <= LOW:
+                    low_idx = j
+                    break
+                j += 1
+            if low_idx is not None:
+                t_mid = (samples[i]['ts'] + samples[low_idx]['ts']) // 2
+                if not any(abs(t_mid - r) <= 600 for r in reset_events):
+                    reset_events.append(t_mid)
+                    added += 1
+                i = low_idx + 1  # salta dopo il drop
+                continue
+        i += 1
     if added:
         reset_events.sort()
         print(f'[store] backfill: ricostruiti {added} reset dai samples')
