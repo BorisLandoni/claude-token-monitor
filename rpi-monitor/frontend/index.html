@@ -1094,11 +1094,11 @@ function drawSparkline() {
   }
 
   // ── Marker reset sessione ────────────────────────────────────────────────
-  // 1) Reset PASSATI: usa quelli reali osservati dal backend (resetEvents).
-  // 2) Reset FUTURO: usa sessionResetTs (il prossimo).
-  // Se non abbiamo storico reset reali, ricadi sulla proiezione ±5h.
+  // Mostra SOLO reset di cui abbiamo certezza:
+  // - Reset PASSATI: quelli osservati realmente dal backend (resetEvents).
+  // - Reset FUTURO: sessionResetTs (il backend ce lo dice esplicitamente).
+  // Niente proiezioni: se non sappiamo, non disegniamo nulla.
   const cGreen = style.getPropertyValue('--green').trim();
-  const SESSION = 5 * 3600;
   const drawMarker = (t) => {
     if (t < viewStart || t > viewEnd) return;
     const x = Math.round(xOf(t)) + 0.5;
@@ -1118,20 +1118,9 @@ function drawSparkline() {
   };
 
   const drawn = new Set();
-  // Reset passati REALI
-  if (resetEvents && resetEvents.length) {
-    resetEvents.forEach(t => {
-      if (!drawn.has(t)) { drawMarker(t); drawn.add(t); }
-    });
-  } else if (sessionResetTs) {
-    // Fallback: proiezione a ritroso ogni 5h (meno preciso)
-    let t = sessionResetTs - SESSION;
-    while (t >= viewStart) {
-      if (!drawn.has(t)) { drawMarker(t); drawn.add(t); }
-      t -= SESSION;
-    }
-  }
-  // Reset FUTURO: sessionResetTs (sempre)
+  (resetEvents || []).forEach(t => {
+    if (!drawn.has(t)) { drawMarker(t); drawn.add(t); }
+  });
   if (sessionResetTs && !drawn.has(sessionResetTs)) {
     drawMarker(sessionResetTs);
   }
