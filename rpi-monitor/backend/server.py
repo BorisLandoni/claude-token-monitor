@@ -112,6 +112,8 @@ def process_account_limits(limits: dict):
         'session_status': 'ok',
         'ts':             int(time.time() * 1000),
     }
+    # Osserva eventuali shift di session_resets_at_ts per registrare i reset
+    store.observe_session_reset_ts(store.account.get('session_resets_at_ts'))
     store.save()
     spct = store.account.get('session_pct_used')
     remain = store.account.get('messages_remaining')
@@ -208,6 +210,12 @@ def get_account():
 @app.get('/api/account/history')
 def get_account_history():
     return store.get_session_history()
+
+
+@app.get('/api/account/resets')
+def get_account_resets():
+    """Timestamp Unix dei reset sessione osservati (ultimi 7 giorni)."""
+    return store.get_reset_events()
 
 
 # ── Session ───────────────────────────────────────────────────────────────────

@@ -112,6 +112,12 @@ def get_account():
 def get_account_history():
     return _history()
 
+@app.get('/api/account/resets')
+def get_account_resets():
+    # Sim: tre reset finti scaglionati nelle ultime ore
+    now_ts = int(time.time())
+    return [now_ts - 5 * 3600, now_ts - 11 * 3600, now_ts - 18 * 3600]
+
 @app.get('/api/session')
 def get_session():
     return {

@@ -845,6 +845,7 @@ let currentPage    = 'now';
 let sessionResetTs = null;
 let refreshTimer   = null;
 let sessionHistory = [];
+let resetEvents    = [];   // timestamp Unix dei reset reali osservati dal backend
 let alertShownAt   = 0;
 let alertDismissTs = 0;
 let lastLoadTs     = Date.now();
@@ -1092,34 +1093,47 @@ function drawSparkline() {
     ctx.fill();
   }
 
-  // ── Marker reset sessione: ancorati a sessionResetTs, step ±5h ───────────
-  // sessionResetTs è il PROSSIMO reset noto (es. 23:50). Da lì proiettiamo
-  // a ritroso (e in avanti) ogni 5h finché restiamo nella finestra visibile.
-  if (sessionResetTs) {
-    const cGreen = style.getPropertyValue('--green').trim();
-    const SESSION = 5 * 3600;
-    // Marker più recente dentro la view
-    let t0 = sessionResetTs;
-    while (t0 - SESSION >= viewStart) t0 -= SESSION;
-    // Disegna avanzando ogni 5h finché siamo dentro la view
-    for (let t = t0; t <= viewEnd; t += SESSION) {
-      if (t < viewStart) continue;
-      const x = Math.round(xOf(t)) + 0.5;
-      ctx.strokeStyle = cGreen;
-      ctx.lineWidth   = 1.2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.moveTo(x, PAD_TOP);
-      ctx.lineTo(x, H - PAD_BOT);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      // Solo il simbolo ↺ (niente testo: si sovrapponeva)
-      ctx.fillStyle    = cGreen;
-      ctx.font         = 'bold 11px system-ui';
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText('↺', x, PAD_TOP - 1);
+  // ── Marker reset sessione ────────────────────────────────────────────────
+  // 1) Reset PASSATI: usa quelli reali osservati dal backend (resetEvents).
+  // 2) Reset FUTURO: usa sessionResetTs (il prossimo).
+  // Se non abbiamo storico reset reali, ricadi sulla proiezione ±5h.
+  const cGreen = style.getPropertyValue('--green').trim();
+  const SESSION = 5 * 3600;
+  const drawMarker = (t) => {
+    if (t < viewStart || t > viewEnd) return;
+    const x = Math.round(xOf(t)) + 0.5;
+    ctx.strokeStyle = cGreen;
+    ctx.lineWidth   = 1.2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, PAD_TOP);
+    ctx.lineTo(x, H - PAD_BOT);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle    = cGreen;
+    ctx.font         = 'bold 11px system-ui';
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText('↺', x, PAD_TOP - 1);
+  };
+
+  const drawn = new Set();
+  // Reset passati REALI
+  if (resetEvents && resetEvents.length) {
+    resetEvents.forEach(t => {
+      if (!drawn.has(t)) { drawMarker(t); drawn.add(t); }
+    });
+  } else if (sessionResetTs) {
+    // Fallback: proiezione a ritroso ogni 5h (meno preciso)
+    let t = sessionResetTs - SESSION;
+    while (t >= viewStart) {
+      if (!drawn.has(t)) { drawMarker(t); drawn.add(t); }
+      t -= SESSION;
     }
+  }
+  // Reset FUTURO: sessionResetTs (sempre)
+  if (sessionResetTs && !drawn.has(sessionResetTs)) {
+    drawMarker(sessionResetTs);
   }
 
   // Baseline
@@ -1270,15 +1284,17 @@ function closeInfoOutside(e) {
 async function loadData() {
   let okFetch = false;
   try {
-    const [account, settings, session, history] = await Promise.all([
+    const [account, settings, session, history, resets] = await Promise.all([
       fetch('/api/account').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/session').then(r => r.json()),
       fetch('/api/account/history').then(r => r.json()).catch(() => []),
+      fetch('/api/account/resets').then(r => r.json()).catch(() => []),
     ]);
     okFetch = true;
     DATA = { account, settings, session };
     sessionHistory = Array.isArray(history) ? history : [];
+    resetEvents    = Array.isArray(resets)  ? resets  : [];
     // Preserva l'ultimo timestamp conosciuto: a sessione 100% l'API spesso non lo restituisce
     const newResetTs = account.session_resets_at_ts || account.reset_at_ts;
     if (newResetTs) {
