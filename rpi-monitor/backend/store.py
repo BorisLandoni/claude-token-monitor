@@ -30,8 +30,33 @@ def load():
             _last_reset_ts = d.get('last_reset_ts', None)
             settings.update(d.get('settings', {}))
             print(f'Caricati {len(samples)} sample + {len(reset_events)} reset + dati account')
+            _backfill_resets_from_samples()
     except Exception as e:
         print(f'Caricamento fallito: {e}')
+
+
+def _backfill_resets_from_samples() -> None:
+    """Scansiona i samples storici per ricostruire reset_events mancanti.
+
+    Ogni drop di >= 40 punti % tra due sample consecutivi (entro 15 min) è
+    un reset di sessione: lo aggiungiamo se non era già stato registrato."""
+    global reset_events
+    if len(samples) < 2:
+        return
+    added = 0
+    for i in range(1, len(samples)):
+        prev, cur = samples[i - 1], samples[i]
+        gap = cur['ts'] - prev['ts']
+        if 0 < gap <= 15 * 60 and (prev['pct'] - cur['pct']) >= 40:
+            t = prev['ts'] + max(1, gap // 2)
+            # Già presente entro 5 min?
+            if not any(abs(t - r) <= 300 for r in reset_events):
+                reset_events.append(t)
+                added += 1
+    if added:
+        reset_events.sort()
+        print(f'[store] backfill: ricostruiti {added} reset dai samples')
+        save()
 
 
 def save():
@@ -92,14 +117,33 @@ def get_reset_events() -> list[int]:
 
 
 def add_sample(session_pct_used: float) -> None:
-    """Registra un campione di utilizzo sessione per la sparkline storica."""
-    global samples
+    """Registra un campione di utilizzo sessione per la sparkline storica.
+
+    Effetto collaterale: se la percentuale crolla bruscamente rispetto al
+    campione precedente (>= 40 punti in giù in <= 15 min), registra un reset
+    sessione *adesso*. Serve come fallback quando l'osservazione basata su
+    session_resets_at_ts manca un reset (token scaduto, RPi riavviato, ecc.)."""
+    global samples, reset_events
     now_ts = int(time.time())
+    new_pct = round(session_pct_used, 1)
+
+    # ── Fallback reset detection: caduta verticale di % ─────────────────────
+    if samples:
+        prev = samples[-1]
+        gap_s = now_ts - prev['ts']
+        if gap_s <= 15 * 60 and (prev['pct'] - new_pct) >= 40:
+            # Reset avvenuto in mezzo: stimato al centro dell'intervallo
+            reset_moment = prev['ts'] + max(1, gap_s // 2)
+            if not reset_events or abs(reset_events[-1] - reset_moment) > 300:
+                reset_events.append(reset_moment)
+                print(f'[store] reset rilevato da drop %: '
+                      f'{prev["pct"]}%→{new_pct}% @ {reset_moment}')
+
     # Deduplicazione a 55s: ogni poll OAuth (min 58s) produce un punto distinto
     if samples and (now_ts - samples[-1]['ts']) < 55:
-        samples[-1] = {'ts': now_ts, 'pct': round(session_pct_used, 1)}
+        samples[-1] = {'ts': now_ts, 'pct': new_pct}
     else:
-        samples.append({'ts': now_ts, 'pct': round(session_pct_used, 1)})
+        samples.append({'ts': now_ts, 'pct': new_pct})
     # Mantieni solo le ultime 24 ore
     cutoff = now_ts - 86_400
     samples = [s for s in samples if s['ts'] >= cutoff]
