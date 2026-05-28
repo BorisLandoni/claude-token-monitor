@@ -1491,8 +1491,23 @@ function renderSettings() {
   updatePollInfo(pi);
   document.querySelectorAll('.theme-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.theme === (cfg.theme || 'blue')));
-  const base = `http://${location.hostname}${location.port ? ':'+location.port : ''}`;
-  setText('server-url', base);
+  // Se siamo sul kiosk (localhost), chiedi al backend l'IP LAN reale.
+  // Altrimenti usa l'hostname con cui ci siamo connessi.
+  const host = location.hostname;
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (isLocal) {
+    // Placeholder finché arriva la risposta dal backend
+    setText('server-url', 'http://… rilevamento IP …');
+    fetch('/api/network').then(r => r.json()).then(net => {
+      const lanHost = net.ip || net.hostname || host;
+      setText('server-url', `http://${lanHost}:${net.port || 8080}`);
+    }).catch(() => {
+      setText('server-url', `http://${host}${location.port ? ':'+location.port : ''}`);
+    });
+  } else {
+    const base = `http://${host}${location.port ? ':'+location.port : ''}`;
+    setText('server-url', base);
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

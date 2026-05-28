@@ -323,6 +323,34 @@ def health():
     return {'ok': True}
 
 
+@app.get('/api/network')
+def get_network_info():
+    """IP LAN del Raspberry, usato per mostrare l'URL di accesso remoto."""
+    import socket
+    ip = None
+    # Trucco: connessione UDP fittizia per scoprire l'IP di routing default
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        try:
+            ip = socket.gethostbyname(socket.gethostname())
+        except Exception:
+            pass
+    hostname = None
+    try:
+        hostname = socket.gethostname()
+    except Exception:
+        pass
+    return {
+        'ip':       ip,
+        'hostname': hostname,
+        'port':     PORT,
+    }
+
+
 # ── Setup RPi ─────────────────────────────────────────────────────────────────
 
 # ── Claude Login (kiosk) ─────────────────────────────────────────────────────
