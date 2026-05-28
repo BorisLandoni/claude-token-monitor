@@ -27,6 +27,9 @@ CHROMIUM_PATH  = os.getenv('CHROMIUM_PATH', '')
 # Claude Code OAuth credentials (auto-managed by Claude Code)
 OAUTH_CREDENTIALS_FILE = Path.home() / '.claude' / '.credentials.json'
 OAUTH_USAGE_URL        = 'https://api.anthropic.com/api/oauth/usage'
+OAUTH_REFRESH_URL      = 'https://console.anthropic.com/v1/oauth/token'
+# client_id pubblico di Claude Code (lo stesso usato dal CLI)
+OAUTH_CLIENT_ID        = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
 OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
 OAUTH_MIN_INTERVAL     = 30    # secondi minimi tra due chiamate OAuth
 OAUTH_BACKOFF_429      = 180   # secondi di attesa dopo un 429
@@ -271,6 +274,60 @@ class ClaudeClient:
             print(f'[oauth] errore lettura credentials: {e}')
             return None
 
+    def _get_refresh_token(self) -> Optional[str]:
+        if not OAUTH_CREDENTIALS_FILE.exists():
+            return None
+        try:
+            data = json.loads(OAUTH_CREDENTIALS_FILE.read_text())
+            return data.get('claudeAiOauth', {}).get('refreshToken')
+        except Exception:
+            return None
+
+    async def refresh_oauth_token(self) -> bool:
+        """
+        Rinnova l'access token usando il refresh_token in .credentials.json.
+        Scrive il nuovo token nel file (stesso formato di Claude Code).
+        Restituisce True se il refresh è riuscito.
+        """
+        rt = self._get_refresh_token()
+        if not rt:
+            print('[oauth] refresh: nessun refresh_token disponibile')
+            return False
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as cli:
+                resp = await cli.post(
+                    OAUTH_REFRESH_URL,
+                    json={
+                        'grant_type':    'refresh_token',
+                        'refresh_token': rt,
+                        'client_id':     OAUTH_CLIENT_ID,
+                    },
+                    headers={'Content-Type': 'application/json'},
+                )
+            if resp.status_code != 200:
+                print(f'[oauth] refresh fallito HTTP {resp.status_code}: {resp.text[:300]}')
+                return False
+            new = resp.json()
+            access  = new.get('access_token')
+            refresh = new.get('refresh_token', rt)
+            expin   = int(new.get('expires_in', 3600))
+            if not access:
+                print('[oauth] refresh: risposta senza access_token')
+                return False
+            # Riscrivi mantenendo gli altri campi esistenti
+            data = json.loads(OAUTH_CREDENTIALS_FILE.read_text())
+            creds = data.get('claudeAiOauth', {}) or {}
+            creds['accessToken']  = access
+            creds['refreshToken'] = refresh
+            creds['expiresAt']    = int((time.time() + expin) * 1000)
+            data['claudeAiOauth'] = creds
+            OAUTH_CREDENTIALS_FILE.write_text(json.dumps(data, indent=2))
+            print(f'[oauth] refresh OK · nuovo token valido per {expin}s')
+            return True
+        except Exception as e:
+            print(f'[oauth] refresh errore: {e}')
+            return False
+
     async def poll_oauth_usage(self) -> Optional[dict]:
         """
         Chiama /api/oauth/usage e restituisce un dict nel formato 'account'.
@@ -301,8 +358,24 @@ class ClaudeClient:
                         'anthropic-beta': OAUTH_BETA_HEADER,
                     },
                 )
+            # Token scaduto → prova il refresh automatico una volta sola
             if resp.status_code == 401:
-                print('[oauth] 401 — token scaduto, esegui claude /login')
+                print('[oauth] 401 — provo refresh automatico')
+                if await self.refresh_oauth_token():
+                    token = self.get_oauth_token()
+                    async with httpx.AsyncClient(timeout=15.0) as cli:
+                        resp = await cli.get(
+                            OAUTH_USAGE_URL,
+                            headers={
+                                'Authorization': f'Bearer {token}',
+                                'anthropic-beta': OAUTH_BETA_HEADER,
+                            },
+                        )
+                else:
+                    print('[oauth] refresh fallito — necessario claude login manuale')
+                    return {'_error': 'oauth_expired'}
+            if resp.status_code == 401:
+                # Anche dopo refresh 401 → veramente scaduto
                 return {'_error': 'oauth_expired'}
             if resp.status_code == 429:
                 self._oauth_retry_after = time.time() + OAUTH_BACKOFF_429
