@@ -231,6 +231,16 @@ def rescan_resets():
     }
 
 
+@app.get('/api/debug/oauth')
+def debug_oauth_raw():
+    """Ultima risposta grezza dall'endpoint /api/oauth/usage di Anthropic."""
+    return {
+        'has_data': client.last_raw_oauth is not None,
+        'raw':      client.last_raw_oauth,
+        'mapped':   store.account,
+    }
+
+
 @app.get('/api/debug/samples')
 def debug_samples():
     """Debug: ultimi sample con timestamp leggibile per verificare drop %."""

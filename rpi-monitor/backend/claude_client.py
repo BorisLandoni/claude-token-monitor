@@ -239,6 +239,7 @@ class ClaudeClient:
 
     _oauth_last_call: float = 0        # timestamp ultima chiamata riuscita
     _oauth_retry_after: float = 0      # timestamp fino a quando NON chiamare (dopo 429)
+    last_raw_oauth: Optional[dict] = None  # ultima risposta OAuth grezza (per debug)
 
     def has_cookies(self) -> bool:
         return COOKIES_FILE.exists()
@@ -388,7 +389,8 @@ class ClaudeClient:
             self._oauth_last_call = time.time()
 
             data = resp.json()
-            print(f'[oauth] raw response: {json.dumps(data)[:300]}')
+            ClaudeClient.last_raw_oauth = data  # salva per debug endpoint
+            print(f'[oauth] raw response: {json.dumps(data)[:600]}')
             out: dict = {'plan': 'pro'}
 
             def _to_pct(v) -> int:
