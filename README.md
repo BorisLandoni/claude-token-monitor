@@ -33,14 +33,23 @@ Il monitor legge l'**OAuth token di Claude Code** da `~/.claude/.credentials.jso
 
 | Componente | Modello | Prezzo |
 |---|---|---|
-| Single-board computer | **Raspberry Pi 4 — 2 GB** | ~€45 |
-| Display touch HDMI | [5" 800×480 capacitivo (Futuranet)](https://futuranet.it/prodotto/display-touch-screen-5-800x480-pixel/) | €59 |
+| Single-board computer | **Raspberry Pi 3 Model B+** (prototipo) — o Raspberry Pi 4 / 5 | ~€35–45 |
+| Display touch HDMI | [5" 800×480 resistivo (Futuranet)](https://futuranet.it/prodotto/display-touch-screen-5-800x480-pixel/) | €59 |
 | MicroSD | 16 GB Classe 10 (Samsung/SanDisk Endurance) | ~€8 |
 | Alimentatore | USB-C 27W / 5.1V 3A ufficiale RPi | ~€12 |
-| Cavo micro-HDMI → HDMI | incluso col display o separato | — |
+| Cavo HDMI / micro-HDMI | ponticello HDMI incluso (vedi nota) | — |
 
-> **RPi 4 2 GB** è il target principale: dashboard fluida.
-> **RPi 3B+** funziona, ma è più lento al boot di Chromium.
+> **Questo progetto è stato realizzato e collaudato su un Raspberry Pi 3 Model B+.**
+> Il display Futuranet da 5" è un pannello **resistivo** che si **appoggia sul connettore GPIO a 40 pin**
+> del Raspberry (ne ricava alimentazione e segnale touch tramite il controller ADS7846/XPT2046), mentre
+> il video passa da un **ponticello HDMI corto**. Sul Pi 3B+ quel ponticello si innesta **direttamente sulla
+> porta HDMI full-size**: il pannello resta solidale al Pi senza cavi video volanti. È il motivo per cui
+> abbiamo scelto questo abbinamento.
+>
+> **Raspberry Pi 4 / 5** funzionano e sono più veloci all'avvio di Chromium, ma espongono due porte
+> **micro-HDMI**: serve quindi un adattatore **micro-HDMI → HDMI** (sul Pi 4 usare la porta **HDMI 0**,
+> quella vicina all'USB-C). Il touch resistivo via GPIO è configurato automaticamente da `setup-rpi.sh`
+> (overlay `ads7846`), quindi **non è un touch USB plug-and-play**: usare l'installer fornito.
 
 ---
 

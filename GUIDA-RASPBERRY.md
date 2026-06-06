@@ -26,15 +26,15 @@ Il sistema legge automaticamente l'utilizzo del tuo account Claude.ai e lo mostr
 
 | Componente | Modello consigliato | Note |
 |---|---|---|
-| Single-board computer | **Raspberry Pi 4 — 2 GB** | Target principale. Il 4B 4GB va benissimo. RPi 3B+ funziona ma è più lento. |
-| Display touch HDMI | [5" 800×480 capacitivo — Futuranet](https://futuranet.it/prodotto/display-touch-screen-5-800x480-pixel/) | Include driver HDMI + USB touch |
-| Cavo micro-HDMI → HDMI | **incluso con il display** o acquisto separato | RPi 4 usa micro-HDMI (non HDMI standard) |
-| Cavo USB-A → USB-micro | Qualsiasi | Per alimentare il touch del display |
+| Single-board computer | **Raspberry Pi 3 Model B+** (usato nel prototipo) — o Pi 4 / 5 | Sul 3B+ il display si innesta a filo sull'HDMI full-size. Il Pi 4/5 è più veloce ma ha micro-HDMI. |
+| Display touch HDMI | [5" 800×480 resistivo — Futuranet](https://futuranet.it/prodotto/display-touch-screen-5-800x480-pixel/) | Touch resistivo via GPIO (ADS7846). Si appoggia sul connettore a 40 pin del Pi. |
+| Ponticello / cavo HDMI | **incluso con il display** | Sul Pi 3B+ il ponticello HDMI si collega diretto; sul Pi 4/5 serve adattatore micro-HDMI → HDMI. |
 | MicroSD | **16 GB Classe 10** minimo, 32 GB consigliato | Samsung Endurance o SanDisk Endurance |
-| Alimentatore | **USB-C 27W / 5.1V 3A** ufficiale RPi | Evita problemi di sotto-tensione |
-| Case (opzionale) | Qualsiasi case RPi 4 con slot laterale | Per montaggio fisso |
+| Alimentatore | **USB-C 27W / 5.1V 3A** (Pi 4/5) o **microUSB 5V 2.5A** (Pi 3B+) | Evita problemi di sotto-tensione |
+| Case (opzionale) | Case compatibile con display su GPIO | Per montaggio fisso |
 
-> **Nota micro-HDMI**: Il Raspberry Pi 4 ha **due porte micro-HDMI** sul lato. Usa la porta **HDMI 0** (quella più vicina all'USB-C di alimentazione) come uscita primaria.
+> **Nota touch**: il pannello è **resistivo** e il touch viaggia sul **connettore GPIO a 40 pin** (controller ADS7846), da cui il display ricava anche l'alimentazione. Non è un touch USB plug-and-play: la configurazione (overlay `ads7846` + calibrazione X11) è fatta automaticamente da `setup-rpi.sh`.
+> **Nota HDMI**: il Raspberry Pi 4/5 ha **due porte micro-HDMI**; usa la porta **HDMI 0** (vicina all'USB-C) con un adattatore micro-HDMI → HDMI. Il Pi 3B+ ha l'HDMI full-size, quindi il ponticello incluso si collega direttamente.
 
 ---
 
@@ -79,9 +79,9 @@ Attendi il completamento (~3-5 minuti).
 
 Con il Raspberry Pi **spento**:
 
-1. **Cavo micro-HDMI** (display) → porta **HDMI 0** del RPi (quella vicina all'USB-C)
-2. **Cavo USB-A → USB-micro** (display, per il touch) → una delle porte USB del RPi
-3. **Cavo USB-C** (alimentatore) → porta USB-C del RPi
+1. **Appoggia il display sul connettore GPIO a 40 pin** del Raspberry (fornisce 5 V + segnale touch resistivo)
+2. **Ponticello/cavo HDMI** (display → Pi): sul **Pi 3B+** si innesta diretto sull'HDMI full-size; sul **Pi 4/5** usa la porta **HDMI 0** con adattatore micro-HDMI → HDMI
+3. **Alimentatore** → porta di alimentazione del Pi (USB-C su Pi 4/5, microUSB su Pi 3B+)
 
 > Se il display non si accende, prova a portare la risoluzione a 800×480: modifica `/boot/firmware/config.txt` aggiungendo:
 > ```
@@ -218,21 +218,27 @@ cd claude-token-monitor
 ### 6.4 Esegui l'installer automatico
 
 ```bash
-bash rpi-monitor/setup/install.sh
+bash setup-rpi.sh
 ```
+
+> In alternativa, senza clonare prima il repo, puoi lanciare l'installer con un'unica riga:
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/main/setup-rpi.sh | bash
+> ```
 
 Lo script fa automaticamente tutto:
 
 | Cosa fa | Dettaglio |
 |---|---|
-| Installa dipendenze di sistema | `python3`, `chromium-browser`, `fonts-noto`, `xdotool`, `unclutter` |
+| Installa dipendenze di sistema | `python3`, librerie grafiche, Chromium |
+| Installa Node.js + **Claude Code CLI** | Per l'autenticazione OAuth (`claude login`) |
 | Crea ambiente virtuale Python | In `rpi-monitor/backend/.venv` |
-| Installa pacchetti Python | FastAPI, uvicorn, httpx |
-| Installa Claude Code CLI | Per OAuth automatico (`claude login`) |
+| Installa pacchetti Python | FastAPI, uvicorn, httpx, pydantic |
+| Configura il **display 5" + touch resistivo** | `hdmi_cvt 800 480` + overlay `ads7846` + calibrazione X11 |
 | Crea servizio systemd | `claude-monitor.service` — si avvia automaticamente al boot |
-| Configura kiosk Chromium | `claude-kiosk.desktop` in LXDE autostart |
+| Configura kiosk Chromium | autostart su display, con auto-restart |
 
-**Durata**: circa 3-5 minuti su RPi 4.
+**Durata**: circa 3-5 minuti. Al termine può chiedere un riavvio per attivare il display.
 
 ### 6.5 Riavvia il Raspberry Pi
 
@@ -504,9 +510,9 @@ sudo systemctl restart claude-monitor
 
 ### Il touch non funziona
 
-1. **Controlla il cavo USB**: il cavo USB-A → USB-micro del display deve essere collegato a una porta USB del RPi (non all'alimentatore)
-2. **Verifica**: `dmesg | grep -i touch` — cerca qualcosa come `usb-hid` o `eGalax`
-3. **Calibrazione**: installa `xinput-calibrator` e segui la procedura
+1. **Controlla l'innesto sul GPIO**: il display deve essere ben appoggiato su tutti i 40 pin (il touch resistivo passa da lì, non da USB)
+2. **Verifica l'overlay**: `dmesg | grep -i ads7846` — deve comparire il controller touch registrato. Controlla che in `/boot/firmware/config.txt` sia presente la riga `dtoverlay=ads7846,...` aggiunta da `setup-rpi.sh`
+3. **Calibrazione**: il file `/usr/share/X11/xorg.conf.d/99-calibration.conf` viene creato dall'installer; per ricalibrare usa `xinput-calibrator`
 
 ### `http://raspberrypi.local:8080` non si apre
 

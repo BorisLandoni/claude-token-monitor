@@ -34,7 +34,7 @@ client = ClaudeClient()
 VERSION_FILE = Path(__file__).parent.parent.parent / 'VERSION'
 GITHUB_VERSION_URL = (
     'https://raw.githubusercontent.com/BorisLandoni/'
-    'claude-token-monitor/claude/rpi-token-monitor/VERSION'
+    'claude-token-monitor/main/VERSION'
 )
 
 
