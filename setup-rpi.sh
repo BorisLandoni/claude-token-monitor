@@ -128,15 +128,10 @@ VENV_DIR="$INSTALL_DIR/rpi-monitor/backend/.venv"
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
 "$VENV_DIR/bin/pip" install --quiet \
-    fastapi "uvicorn[standard]" httpx playwright pydantic
+    fastapi "uvicorn[standard]" httpx pydantic
 ok "Dipendenze Python installate"
 
-# ── 7. Playwright browser ─────────────────────────────────────
-step "Installazione browser Playwright (Chromium, ~150MB)..."
-"$VENV_DIR/bin/python" -m playwright install chromium
-ok "Playwright Chromium installato"
-
-# ── 8. Script di avvio ────────────────────────────────────────
+# ── 7. Script di avvio ────────────────────────────────────────
 step "Creazione script di avvio..."
 cat > "$INSTALL_DIR/start.sh" <<EOF
 #!/usr/bin/env bash
@@ -147,7 +142,7 @@ EOF
 chmod +x "$INSTALL_DIR/start.sh"
 ok "Script $INSTALL_DIR/start.sh creato"
 
-# ── 9. Servizio systemd (autostart al boot) ───────────────────
+# ── 8. Servizio systemd (autostart al boot) ───────────────────
 step "Configurazione servizio systemd ($SERVICE_NAME)..."
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
@@ -182,7 +177,7 @@ else
     warn "Il servizio non risulta attivo. Controlla: journalctl -u $SERVICE_NAME -n 30"
 fi
 
-# ── 10. Display 5" HDMI 800x480 + Touch GPIO ADS7846 (lcdwiki)─
+# ── 9. Display 5" HDMI 800x480 + Touch GPIO ADS7846 (lcdwiki)─
 # Equivalente a: git clone goodtft/LCD-show && sudo ./LCD5-show
 # ma senza il reboot automatico e senza dipendere da repo esterni.
 step "Configurazione display 5\" HDMI 800x480 + touch GPIO..."
@@ -248,7 +243,7 @@ CALIB_CONF
     fi
 fi
 
-# ── 11. Kiosk Chromium (modalità display) ────────────────────
+# ── 10. Kiosk Chromium (modalità display) ────────────────────
 step "Configurazione Chromium kiosk con auto-restart..."
 
 # RPi OS Bookworm usa "chromium"; Bullseye usa "chromium-browser"
@@ -350,7 +345,7 @@ echo "    Script:   $KIOSK_SCRIPT"
 echo "    Log:      \$HOME/kiosk.log"
 echo "    Autostart: $AUTOSTART_FILE"
 
-# ── 12. Firewall: porta 8080 ──────────────────────────────────
+# ── 11. Firewall: porta 8080 ──────────────────────────────────
 if command -v ufw &>/dev/null; then
     step "Apertura porta $PORT nel firewall..."
     sudo ufw allow "$PORT/tcp" &>/dev/null || true

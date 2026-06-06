@@ -73,8 +73,8 @@ def _get_git_commit() -> str:
 
 def process_account_limits(limits: dict):
     reset_at_ts = store.to_unix_ts(limits.get('reset_at') or limits.get('session_resets_at'))
-    # Preserve credits/design data from previous Playwright scrape when fast httpx
-    # poll runs (it won't return billing data).
+    # Conserva i dati che un poll può non restituire (es. weekly/crediti assenti
+    # in una risposta parziale), così la UI non lampeggia a vuoto.
     prev = store.account or {}
     def _keep(key):
         return limits.get(key) if limits.get(key) is not None else prev.get(key)
@@ -84,29 +84,22 @@ def process_account_limits(limits: dict):
         'messages_remaining': limits.get('messages_remaining'),
         'messages_limit':     limits.get('messages_limit'),
         'messages_used':      limits.get('messages_used'),
-        # Percentage-based (Pro accounts — from claude.ai/settings > Utilizzo)
+        # Percentage-based (Pro accounts — da /api/oauth/usage five_hour)
         'session_pct_used':      limits.get('session_pct_used'),
         'session_pct_remaining': limits.get('session_pct_remaining'),
         # Session reset
         'reset_at':             limits.get('reset_at') or limits.get('session_resets_at'),
         'reset_at_ts':          reset_at_ts,
         'session_resets_at_ts': limits.get('session_resets_at_ts') or reset_at_ts,
-        # Weekly limits
+        # Weekly limits (seven_day)
         'weekly_pct_used':      limits.get('weekly_pct_used'),
         'weekly_pct_remaining': limits.get('weekly_pct_remaining'),
         'weekly_resets_label':  _keep('weekly_resets_label'),
         'weekly_resets_at_ts':  limits.get('weekly_resets_at_ts') or _keep('weekly_resets_at_ts'),
-        # Claude Design limits (DOM scrape only — preserved across fast polls)
-        'design_pct_used':      _keep('design_pct_used'),
-        'design_pct_remaining': _keep('design_pct_remaining'),
-        # Credits / billing (DOM scrape only — preserved across fast polls)
+        # Credits / billing (extra_usage)
         'credits_spent_eur':    _keep('credits_spent_eur'),
         'credits_limit_eur':    _keep('credits_limit_eur'),
         'credits_balance_eur':  _keep('credits_balance_eur'),
-        'credits_reset_label':  _keep('credits_reset_label'),
-        # Routine giornaliere (DOM scrape only — preserved across fast polls)
-        'routines_used':        _keep('routines_used'),
-        'routines_limit':       _keep('routines_limit'),
         # Meta
         'plan':           limits.get('plan', 'pro'),
         'session_status': 'ok',
@@ -148,35 +141,18 @@ async def poll_loop():
 
 async def do_poll() -> dict:
     """
-    Strategia poll:
-    1. OAuth (Claude Code) → sessione, weekly, crediti (primario, ~1s).
-    2. Se cookie disponibili → DOM scrape Playwright per Claude Design + routine.
-    3. Merge: i dati DOM arricchiscono quelli OAuth.
+    Poll OAuth (Claude Code) → sessione 5h, weekly 7d, crediti (~1s).
     Ritorna {'refreshed': bool, 'next_poll_in': int}
     """
-    merged: dict = {}
-
-    # OAuth primario
     oauth_data = await client.poll_oauth_usage()
     if oauth_data and oauth_data.get('_error') == 'oauth_expired':
         if store.account:
             store.account['session_status'] = 'oauth_expired'
             store.save()
         return {'refreshed': False, 'next_poll_in': 0}
+
     if oauth_data:
-        merged.update(oauth_data)
-
-    # Cookie/DOM secondario (per design + routine)
-    if client.has_cookies():
-        dom_data = await client.poll_with_playwright()
-        if dom_data and not dom_data.get('_error'):
-            # OAuth ha priorità su session/weekly; DOM aggiunge il resto
-            for k, v in dom_data.items():
-                if k not in merged or merged.get(k) is None:
-                    merged[k] = v
-
-    if merged:
-        process_account_limits(merged)
+        process_account_limits(oauth_data)
         return {'refreshed': True, 'next_poll_in': client.seconds_until_next_poll()}
     return {'refreshed': False, 'next_poll_in': client.seconds_until_next_poll()}
 
@@ -267,16 +243,12 @@ def debug_samples():
 
 @app.get('/api/session')
 def get_session():
-    has_oauth   = client.has_oauth()
-    has_cookies = client.has_cookies()
+    has_oauth = client.has_oauth()
     return {
-        'logged_in':         has_oauth or has_cookies,
-        'oauth_available':   has_oauth,
-        'cookies_available': has_cookies,
-        'email':             store.settings.get('email', ''),
-        'session_status':    (store.account or {}).get('session_status', 'not_logged_in'),
-        'cookie_age_hours':  round(client.get_cookie_age_seconds() / 3600, 1)
-            if client.get_cookie_age_seconds() is not None else None,
+        'logged_in':       has_oauth,
+        'oauth_available': has_oauth,
+        'email':           store.settings.get('email', ''),
+        'session_status':  (store.account or {}).get('session_status', 'not_logged_in'),
     }
 
 
@@ -292,9 +264,8 @@ async def force_poll():
 
 @app.post('/api/logout')
 def logout():
-    from claude_client import COOKIES_FILE
-    if COOKIES_FILE.exists():
-        COOKIES_FILE.unlink()
+    """Pulisce lo snapshot account locale (le credenziali OAuth restano in
+    ~/.claude/.credentials.json, gestite da Claude Code)."""
     store.account = None
     store.save()
     return {'ok': True}

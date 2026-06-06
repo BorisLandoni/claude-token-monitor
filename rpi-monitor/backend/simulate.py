@@ -121,12 +121,10 @@ def get_account_resets():
 @app.get('/api/session')
 def get_session():
     return {
-        'logged_in':         True,
-        'oauth_available':   True,
-        'cookies_available': False,
-        'email':             SETTINGS['email'],
-        'session_status':    'ok',
-        'cookie_age_hours':  None,
+        'logged_in':       True,
+        'oauth_available': True,
+        'email':           SETTINGS['email'],
+        'session_status':  'ok',
     }
 
 @app.post('/api/logout')

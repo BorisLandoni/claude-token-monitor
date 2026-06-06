@@ -1,6 +1,6 @@
-# Guida Completa — Claude Monitor su Raspberry Pi 4
+# Guida Completa — Claude Monitor su Raspberry Pi
 
-Installazione passo-passo del monitor Claude.ai su Raspberry Pi 4 con display touch da 5" HDMI (800×480).  
+Installazione passo-passo del monitor Claude.ai su Raspberry Pi (collaudato su Pi 3 Model B+) con display touch da 5" HDMI (800×480).  
 Il sistema legge automaticamente l'utilizzo del tuo account Claude.ai e lo mostra su un display fisico dedicato.
 
 ---
@@ -52,7 +52,7 @@ Apri Raspberry Pi Imager e configura:
 
 | Campo | Valore |
 |---|---|
-| **Device** | Raspberry Pi 4 |
+| **Device** | Raspberry Pi 3 (o Pi 4 / 5 se usi quel modello) |
 | **OS** | Raspberry Pi OS (64-bit) — con desktop (Bookworm) |
 | **Storage** | La tua microSD |
 
@@ -567,7 +567,7 @@ L'access token OAuth dura circa 1 ora ma viene **rinnovato automaticamente** dal
 free -h
 ```
 
-Su RPi 4 2GB ci aspettiamo ~800 MB liberi a riposo con il kiosk attivo.
+Su un RPi 3B+ (1 GB) con il kiosk attivo restano alcune centinaia di MB liberi; su Pi 4/5 con più RAM il margine è ancora maggiore.
 
 ---
 
@@ -582,7 +582,7 @@ Claude.ai (web/mobile/VS Code/Claude Code)
        │  refresh_token automatico
        ▼
 ┌─────────────────────────────┐
-│  RPi 4  ·  FastAPI  :8080   │
+│  RPi 3B+  ·  FastAPI :8080  │
 │  rpi-monitor/backend/       │
 └──────────────┬──────────────┘
                │

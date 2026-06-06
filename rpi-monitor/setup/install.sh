@@ -21,7 +21,7 @@ echo "╚═══════════════════════�
 echo ""
 
 # ── 1. System packages ────────────────────────────────────────────────────────
-echo "[1/6] Installazione pacchetti di sistema..."
+echo "[1/5] Installazione pacchetti di sistema..."
 sudo apt-get update -qq
 sudo apt-get install -y --no-install-recommends \
   python3-pip python3-venv python3-full \
@@ -41,28 +41,14 @@ done
 echo "    Chromium: ${CHROMIUM_PATH:-non trovato}"
 
 # ── 2. Python virtual environment ────────────────────────────────────────────
-echo "[2/6] Creazione virtual environment Python..."
+echo "[2/5] Creazione virtual environment Python..."
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --upgrade pip -q
 "$VENV_DIR/bin/pip" install -r "$BACKEND_DIR/requirements.txt" -q
 echo "    Dipendenze Python installate."
 
-# ── 3. Playwright browsers ────────────────────────────────────────────────────
-echo "[3/6] Setup Playwright..."
-if [ -n "$CHROMIUM_PATH" ]; then
-  # Use system Chromium (saves ~300MB)
-  "$VENV_DIR/bin/playwright" install-deps chromium 2>/dev/null || true
-  echo "    Uso Chromium di sistema: $CHROMIUM_PATH"
-  CHROMIUM_ENV="Environment=CHROMIUM_PATH=$CHROMIUM_PATH"
-else
-  # Download Playwright's own Chromium
-  "$VENV_DIR/bin/playwright" install chromium
-  CHROMIUM_ENV=""
-  echo "    Chromium Playwright installato."
-fi
-
-# ── 4. systemd service (backend) ─────────────────────────────────────────────
-echo "[4/6] Installazione servizio systemd..."
+# ── 3. systemd service (backend) ─────────────────────────────────────────────
+echo "[3/5] Installazione servizio systemd..."
 SERVICE_FILE="/etc/systemd/system/claude-monitor.service"
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
@@ -74,7 +60,6 @@ Wants=network-online.target
 User=$SERVICE_USER
 WorkingDirectory=$BACKEND_DIR
 Environment=PORT=$PORT
-${CHROMIUM_ENV}
 ExecStart=$VENV_DIR/bin/uvicorn server:app --host 0.0.0.0 --port $PORT
 Restart=on-failure
 RestartSec=5s
@@ -91,7 +76,7 @@ sudo systemctl restart claude-monitor
 echo "    Servizio claude-monitor attivo sulla porta $PORT."
 
 # ── 5. Kiosk startup script ───────────────────────────────────────────────────
-echo "[5/6] Configurazione kiosk..."
+echo "[4/5] Configurazione kiosk..."
 KIOSK_SCRIPT="$SETUP_DIR/start-kiosk.sh"
 cat > "$KIOSK_SCRIPT" <<KIOSK
 #!/usr/bin/env bash
@@ -142,7 +127,7 @@ DESKTOP
 echo "    Kiosk configurato (avvio automatico al login desktop)."
 
 # ── 6. Done ───────────────────────────────────────────────────────────────────
-echo "[6/6] Installazione completata!"
+echo "[5/5] Installazione completata!"
 echo ""
 echo "  ┌─────────────────────────────────────────────────┐"
 echo "  │  Claude Monitor è in esecuzione!                │"
