@@ -749,9 +749,9 @@ body { background: var(--bg); color: var(--text); }
 <!-- ── Login Modal ────────────────────────────────────────────────────────── -->
 <div id="login-modal">
   <div class="login-modal-box">
-    <div class="login-modal-title">RINNOVA LOGIN CLAUDE</div>
+    <div class="login-modal-title">ACCESSO CLAUDE</div>
     <div class="login-modal-sub">
-      Apri questo link sul telefono o sul PC<br>e autorizza l'accesso su claude.ai
+      Apri questo link sul telefono o sul PC<br>e autorizza l'accesso con il tuo account claude.ai
     </div>
     <a id="login-url-link" href="#" target="_blank" rel="noopener"
        style="display:none;background:var(--cyan);color:#000;font-weight:700;
@@ -1474,17 +1474,25 @@ function renderSettings() {
     }
   } else {
     lines.push(
-      '<span class="s-err">✗ Claude Code non trovato</span><br>' +
-      '<small style="opacity:.7">Installa Claude Code ed esegui <code>claude login</code></small>'
+      '<span class="s-err">✗ Non ancora connesso a Claude</span><br>' +
+      '<small style="opacity:.7">Premi <b>Accedi a Claude</b> qui sotto e autorizza ' +
+      'l\'accesso dal telefono o dal PC</small>'
     );
   }
   el.innerHTML = lines.join('<br>');
 
-  // Mostra "Rinnova Login" solo se scaduto; "Aggiorna Adesso" solo se connesso e ok
+  // "Accedi a Claude" sul primo avvio; "Riprova Connessione" se il token è scaduto.
+  // "Aggiorna Adesso" solo quando la connessione è attiva e funzionante.
   const pollBtn    = document.getElementById('poll-btn');
   const reloginBtn = document.getElementById('relogin-btn');
+  const needsLogin = oauthExpired || !s.oauth_available;
   if (pollBtn)    pollBtn.style.display    = (s.logged_in && !oauthExpired) ? '' : 'none';
-  if (reloginBtn) reloginBtn.style.display = oauthExpired ? '' : 'none';
+  if (reloginBtn) {
+    reloginBtn.style.display = needsLogin ? '' : 'none';
+    reloginBtn.innerHTML = s.oauth_available
+      ? '↺ &nbsp;Riprova Connessione'
+      : '→ &nbsp;Accedi a Claude';
+  }
 
   const pi = cfg.poll_interval || 60;
   document.getElementById('poll-interval').value = String(pi);
@@ -1772,9 +1780,29 @@ function showUpdateToast() {
 async function autoRefreshLogin() {
   const btn  = document.getElementById('relogin-btn');
   const help = document.getElementById('relogin-help');
+  const firstLogin = !(DATA.session || {}).oauth_available;
   btn.disabled = true;
-  btn.textContent = '⟳ Tentativo refresh OAuth…';
   help.style.display = 'none';
+
+  // Primo accesso (nessuna credenziale): vai diretto al login, niente refresh.
+  if (firstLogin) {
+    btn.textContent = '→ Avvio accesso…';
+    try {
+      await startClaudeLogin();
+    } catch (e) {
+      help.style.display = '';
+      help.innerHTML =
+        '<b style="color:var(--red)">✗ Avvio login fallito:</b> ' + (e.message || e) +
+        '<br><br>Fallback via SSH: <code style="background:var(--bg);padding:2px 6px;' +
+        'border-radius:4px">claude login</code>';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '→ &nbsp;Accedi a Claude';
+    }
+    return;
+  }
+
+  btn.textContent = '⟳ Tentativo refresh OAuth…';
   try {
     // /api/poll forza un poll che ora include il refresh automatico lato backend
     const r = await fetch('/api/poll', { method: 'POST' });
@@ -1812,7 +1840,7 @@ async function autoRefreshLogin() {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   CLAUDE LOGIN MODAL (legacy — non più usato di default)
+   CLAUDE LOGIN MODAL — accesso/rinnovo direttamente dal monitor (touch)
    ════════════════════════════════════════════════════════════════════════ */
 let _loginPollTimer = null;
 

@@ -4,7 +4,7 @@ rpi-monitor/backend/endpoints.json
 rpi-monitor/backend/data.json
 rpi-monitor/backend/.venv/
 rpi-monitor/backend/__pycache__/
-rpi-monitor/setup/start-kiosk.sh
+start-kiosk.sh
 
 # Python
 __pycache__/

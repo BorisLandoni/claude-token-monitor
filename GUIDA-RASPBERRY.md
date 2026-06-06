@@ -252,7 +252,18 @@ Dopo il riavvio, il sistema si avvia automaticamente in modalità kiosk: sul dis
 
 ## 7. Primo accesso a Claude
 
-L'autenticazione avviene via **OAuth di Claude Code** — nessun login con email/password, nessun cookie da copiare. Lo script `setup-rpi.sh` esegue `claude login` durante l'installazione, e da quel momento il monitor è autonomo: rinnova l'access token automaticamente quando scade, usando il `refresh_token` salvato in `~/.claude/.credentials.json`.
+L'autenticazione avviene via **OAuth di Claude Code** — nessun login con email/password, nessun cookie da copiare. Al primo avvio le credenziali non ci sono ancora, quindi va fatto **un solo login**. Da quel momento il monitor è autonomo: rinnova l'access token automaticamente quando scade, usando il `refresh_token` salvato in `~/.claude/.credentials.json`.
+
+### 7.0 Esegui il login (dal monitor, senza SSH)
+
+Il modo più semplice è **direttamente dal touch del monitor**:
+
+1. Sul display, tocca **IMPOSTAZIONI** (in basso)
+2. Premi **Accedi a Claude**
+3. Dopo qualche secondo compare un **link di autenticazione**: aprilo dal telefono o dal PC, accedi a `claude.ai` con il tuo account e autorizza
+4. Il monitor rileva l'accesso, mostra **"Login completato"** → premi **Riavvia Servizio**
+
+> In alternativa, via SSH: `claude login` (apre un URL da autorizzare nel browser), poi `sudo systemctl restart claude-monitor`.
 
 ### 7.1 Apri la dashboard dal PC
 
@@ -442,7 +453,7 @@ sudo systemctl stop claude-monitor
 # Riavviarlo
 sudo systemctl restart claude-monitor
 
-# Abilitare l'avvio automatico al boot (già attivo dopo install.sh)
+# Abilitare l'avvio automatico al boot (già attivo dopo setup-rpi.sh)
 sudo systemctl enable claude-monitor
 
 # Disabilitare l'avvio automatico
@@ -458,7 +469,7 @@ Il kiosk si avvia automaticamente tramite LXDE autostart. Se il display è spent
 
 ```bash
 # Riavviare il kiosk manualmente (sul desktop RPi o via SSH con display locale)
-DISPLAY=:0 bash ~/claude-token-monitor/rpi-monitor/setup/start-kiosk.sh &
+DISPLAY=:0 bash ~/claude-token-monitor/start-kiosk.sh &
 ```
 
 ---
@@ -549,7 +560,7 @@ journalctl -u claude-monitor -b --no-pager | tail -50
 ```
 
 Errori comuni:
-- `ModuleNotFoundError`: il venv non è attivato correttamente → riinstalla con `bash rpi-monitor/setup/install.sh`
+- `ModuleNotFoundError`: il venv non è attivato correttamente → riinstalla con `bash setup-rpi.sh`
 - `Port already in use`: un'altra istanza è già in esecuzione → `sudo systemctl stop claude-monitor`; `sudo pkill -f server.py`; `sudo systemctl start claude-monitor`
 
 ### I dati non si aggiornano

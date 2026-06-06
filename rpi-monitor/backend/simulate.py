@@ -10,7 +10,9 @@ Dopo 5 ore si resetta da sola, proprio come il vero Claude.
 """
 import asyncio
 import math
+import os
 import random
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +22,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-PORT = 8080
+# Porta: argomento da riga di comando, poi env PORT, infine default 8080
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else int(os.getenv('PORT', '8080'))
 _repo_frontend = Path(__file__).parent.parent / 'frontend'
 FRONTEND_DIR   = _repo_frontend if _repo_frontend.exists() else Path(__file__).parent
 

@@ -25,7 +25,7 @@ Claude.ai (web / desktop / mobile / VS Code / Claude Code)
       Dashboard touch — 3 pagine
 ```
 
-Il monitor legge l'**OAuth token di Claude Code** da `~/.claude/.credentials.json` e chiama `https://api.anthropic.com/api/oauth/usage`. Quando l'access token scade, il backend usa il `refresh_token` per rinnovarlo **automaticamente**, senza interazione utente — finché il refresh_token rimane valido (settimane). Solo quando anche quello scade serve un `claude login` manuale via SSH.
+Il monitor legge l'**OAuth token di Claude Code** da `~/.claude/.credentials.json` e chiama `https://api.anthropic.com/api/oauth/usage`. Quando l'access token scade, il backend usa il `refresh_token` per rinnovarlo **automaticamente**, senza interazione utente — finché il refresh_token rimane valido (settimane). Solo quando anche quello scade serve un nuovo login, che si fa **dal touch del monitor** (IMPOSTAZIONI → Accedi a Claude) o, in alternativa, via SSH con `claude login`.
 
 ---
 
@@ -62,15 +62,19 @@ curl -fsSL https://raw.githubusercontent.com/BorisLandoni/claude-token-monitor/m
 Lo script:
 1. Installa Node.js, Python, dipendenze di sistema
 2. Installa **Claude Code** (`claude` CLI)
-3. Esegue `claude login` — autenticazione one-shot da browser
-4. Clona il repository
-5. Crea l'ambiente Python
-6. Crea e avvia il servizio **systemd** (autostart al boot)
-7. Configura **Chromium in modalità kiosk** sul display
+3. Clona il repository e crea l'ambiente Python
+4. Configura display 5" + touch resistivo (overlay `ads7846`)
+5. Crea e avvia il servizio **systemd** (autostart al boot)
+6. Configura **Chromium in modalità kiosk** sul display
 
 Dopo il setup:
 - Dashboard locale: `http://localhost:8080`
 - Da PC/telefono sulla stessa LAN: `http://<IP-del-rpi>:8080`
+
+### Primo login (dal monitor, senza SSH)
+
+Al primo avvio devi collegare **una sola volta** il tuo account Claude, direttamente dal touch:
+**IMPOSTAZIONI → Accedi a Claude** → si apre un link di autenticazione da aprire sul telefono/PC → autorizzi su `claude.ai` → **Riavvia Servizio**. Fatto: da quel momento il monitor rinnova il token da solo per settimane. (In alternativa, via SSH: `claude login`.)
 
 Guida passo-passo completa (flash SD, WiFi, SSH, troubleshooting) → [GUIDA-RASPBERRY.md](GUIDA-RASPBERRY.md)
 
@@ -134,9 +138,9 @@ Tre pagine, navigazione touch in basso.
 - Prossimo reset crediti (visibile solo se l'API lo fornisce)
 
 ### IMPOSTAZIONI
-- **Stato OAuth Claude Code** (attivo / scaduto)
-- **Riprova Connessione**: tenta refresh automatico via `refresh_token`. Solo se fallisce, mostra istruzioni per `claude login` manuale.
-- **Cancella sessione locale**: pulisce eventuali cookie locali (conferma a 2 step).
+- **Stato OAuth Claude Code** (attivo / scaduto / non connesso)
+- **Accedi a Claude** (primo login) / **Riprova Connessione** (se scaduto): apre il login OAuth **direttamente dal monitor** — mostra a schermo un link da autorizzare su telefono/PC, poi rileva l'accesso e riavvia. Niente SSH.
+- **Cancella sessione locale**: azzera lo snapshot account locale (conferma a 2 step).
 - **Versione software + Verifica aggiornamenti**: aggiornamento OTA da GitHub direttamente dall'UI (vedi sotto).
 - **Esci dal Kiosk**: chiude Chromium per accedere al desktop (conferma a 2 step).
 - **Quanto spesso richiedere nuovi dati a Claude**: 1 / 2 / 5 / 10 / 30 minuti.
@@ -227,7 +231,7 @@ Backend sulla porta 8080.
 | `GET`  | `/api/version/check` | Confronta con GitHub |
 | `POST` | `/api/update` | Avvia aggiornamento OTA |
 | `GET`  | `/api/update/log` | Log streaming dell'update |
-| `POST` | `/api/login/start` | Avvia `claude login` (fallback se refresh fallisce) |
+| `POST` | `/api/login/start` | Avvia il login OAuth dal monitor (primo accesso o se il refresh fallisce) |
 | `GET`  | `/api/login/status` | Stato login |
 | `POST` | `/api/login/cancel` | Annulla login in corso |
 | `POST` | `/api/kiosk/exit` | Chiude Chromium |
