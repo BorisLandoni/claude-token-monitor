@@ -1949,20 +1949,23 @@ async function submitLoginCode() {
   const status = document.getElementById('login-modal-status');
   const code  = (input.value || '').trim();
   if (!code) { input.focus(); return; }
-  btn.disabled = true; btn.textContent = '⟳ Invio…';
+  btn.disabled = true; btn.textContent = '⟳ Verifica…';
+  status.style.color = 'var(--amber)';
+  status.textContent = '⟳ Verifica del codice…';
   try {
     const r = await fetch('/api/login/code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
     }).then(r => r.json());
-    if (!r.ok) {
-      status.style.color = 'var(--red)';
-      status.textContent = '✗ ' + (r.reason || 'invio del codice fallito');
-    } else {
-      status.style.color = 'var(--amber)';
-      status.textContent = '⟳ Verifica del codice…';
+    if (r.ok) {
+      // Scambio riuscito e token salvato lato server → login completato
+      clearInterval(_loginPollTimer); _loginPollTimer = null;
       input.value = '';
+      _onLoginSuccess();
+    } else {
+      status.style.color = 'var(--red)';
+      status.textContent = '✗ ' + (r.reason || 'codice non valido');
     }
   } catch(e) {
     status.style.color = 'var(--red)';

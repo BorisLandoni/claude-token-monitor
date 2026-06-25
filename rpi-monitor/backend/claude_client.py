@@ -10,22 +10,39 @@ Nessun cookie, nessun browser headless: l'endpoint OAuth gratuito di
 Claude Code è sufficiente per sessione 5h, settimanale 7d e crediti.
 """
 
+import base64
+import hashlib
 import json
+import os
+import secrets
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 import httpx
 
-# Claude Code OAuth credentials (auto-managed by Claude Code)
+# Claude Code OAuth credentials (lo stesso file/formato del CLI ufficiale)
 OAUTH_CREDENTIALS_FILE = Path.home() / '.claude' / '.credentials.json'
 OAUTH_USAGE_URL        = 'https://api.anthropic.com/api/oauth/usage'
-OAUTH_REFRESH_URL      = 'https://console.anthropic.com/v1/oauth/token'
+# Endpoint unico per scambio authorization_code e refresh (form-urlencoded)
+OAUTH_TOKEN_URL        = 'https://console.anthropic.com/v1/oauth/token'
+OAUTH_REFRESH_URL      = OAUTH_TOKEN_URL
+# Pagina di autorizzazione (code=true → mostra il codice da incollare).
+# Host/path identici a quelli generati dal CLI ufficiale di Claude Code.
+OAUTH_AUTHORIZE_URL    = 'https://claude.com/cai/oauth/authorize'
+OAUTH_REDIRECT_URI     = 'https://platform.claude.com/oauth/code/callback'
+OAUTH_SCOPES           = ('org:create_api_key user:profile user:inference '
+                          'user:sessions:claude_code user:mcp_servers user:file_upload')
 # client_id pubblico di Claude Code (lo stesso usato dal CLI)
 OAUTH_CLIENT_ID        = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
 OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
 OAUTH_MIN_INTERVAL     = 30    # secondi minimi tra due chiamate OAuth
 OAUTH_BACKOFF_429      = 180   # secondi di attesa dopo un 429
+
+
+def _b64url(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b'=').decode()
 
 
 # ── ClaudeClient ──────────────────────────────────────────────────────────────
@@ -84,15 +101,15 @@ class ClaudeClient:
             print(f'[oauth] refresh in backoff — riprovo tra {wait}s')
             return False
         try:
-            async with httpx.AsyncClient(timeout=20.0) as cli:
+            async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as cli:
                 resp = await cli.post(
                     OAUTH_REFRESH_URL,
-                    json={
+                    data={
                         'grant_type':    'refresh_token',
                         'refresh_token': rt,
                         'client_id':     OAUTH_CLIENT_ID,
                     },
-                    headers={'Content-Type': 'application/json'},
+                    headers={'Content-Type': 'application/x-www-form-urlencoded'},
                 )
             if resp.status_code == 429:
                 self._oauth_refresh_retry_after = time.time() + OAUTH_BACKOFF_429 * 4
@@ -108,19 +125,106 @@ class ClaudeClient:
             if not access:
                 print('[oauth] refresh: risposta senza access_token')
                 return False
-            # Riscrivi mantenendo gli altri campi esistenti
-            data = json.loads(OAUTH_CREDENTIALS_FILE.read_text())
-            creds = data.get('claudeAiOauth', {}) or {}
-            creds['accessToken']  = access
-            creds['refreshToken'] = refresh
-            creds['expiresAt']    = int((time.time() + expin) * 1000)
-            data['claudeAiOauth'] = creds
-            OAUTH_CREDENTIALS_FILE.write_text(json.dumps(data, indent=2))
+            self._write_credentials(access, refresh, expin, new.get('scope'))
             print(f'[oauth] refresh OK · nuovo token valido per {expin}s')
             return True
         except Exception as e:
             print(f'[oauth] refresh errore: {e}')
             return False
+
+    # ── OAuth login nativo (PKCE) ─────────────────────────────────────────────
+
+    def build_authorize_url(self) -> tuple[str, str, str]:
+        """Genera (authorize_url, code_verifier, state) per il flusso PKCE.
+        L'utente apre l'URL, autorizza su claude.ai e ottiene un codice da
+        incollare (`code=true` → flusso manuale, nessun callback localhost)."""
+        verifier  = _b64url(secrets.token_bytes(32))
+        challenge = _b64url(hashlib.sha256(verifier.encode()).digest())
+        state     = _b64url(secrets.token_bytes(32))
+        params = {
+            'code':                  'true',
+            'client_id':             OAUTH_CLIENT_ID,
+            'response_type':         'code',
+            'redirect_uri':          OAUTH_REDIRECT_URI,
+            'scope':                 OAUTH_SCOPES,
+            'code_challenge':        challenge,
+            'code_challenge_method': 'S256',
+            'state':                 state,
+        }
+        return f'{OAUTH_AUTHORIZE_URL}?{urlencode(params)}', verifier, state
+
+    async def exchange_code(self, code: str, verifier: str, state: str) -> dict:
+        """Scambia il codice di autorizzazione per access+refresh token e li
+        scrive in .credentials.json. Il codice incollato può essere nel formato
+        `<code>#<state>`: si usa la parte prima di `#`."""
+        raw = (code or '').strip()
+        if '#' in raw:
+            code_part, _, state_part = raw.partition('#')
+        else:
+            code_part, state_part = raw, state
+        data = {
+            'grant_type':    'authorization_code',
+            'code':          code_part.strip(),
+            'redirect_uri':  OAUTH_REDIRECT_URI,
+            'client_id':     OAUTH_CLIENT_ID,
+            'code_verifier': verifier,
+            'state':         (state_part or state).strip(),
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as cli:
+                resp = await cli.post(
+                    OAUTH_TOKEN_URL, data=data,
+                    headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                )
+        except Exception as e:
+            return {'_error': f'rete: {e}'}
+        if resp.status_code != 200:
+            msg = resp.text[:300]
+            try:
+                j = resp.json()
+                msg = j.get('error_description') or j.get('error') or msg
+            except Exception:
+                pass
+            print(f'[oauth] exchange fallito HTTP {resp.status_code}: {msg}')
+            return {'_error': f'HTTP {resp.status_code}: {msg}'}
+        j = resp.json()
+        access  = j.get('access_token')
+        refresh = j.get('refresh_token')
+        if not access:
+            return {'_error': 'risposta senza access_token'}
+        self._write_credentials(access, refresh, int(j.get('expires_in', 28800)), j.get('scope'))
+        print('[oauth] login completato · credenziali scritte')
+        return {'ok': True}
+
+    def _write_credentials(self, access: str, refresh: Optional[str],
+                           expires_in: int, scope: Optional[str]) -> None:
+        """Scrive accessToken/refreshToken/expiresAt in ~/.claude/.credentials.json
+        nel formato di Claude Code, preservando gli altri campi già presenti."""
+        OAUTH_CREDENTIALS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        data: dict = {}
+        if OAUTH_CREDENTIALS_FILE.exists():
+            try:
+                data = json.loads(OAUTH_CREDENTIALS_FILE.read_text())
+            except Exception:
+                data = {}
+        creds = data.get('claudeAiOauth') or {}
+        creds['accessToken'] = access
+        if refresh:
+            creds['refreshToken'] = refresh
+        creds['expiresAt'] = int((time.time() + expires_in) * 1000)
+        if scope:
+            creds['scopes'] = scope.split()
+        elif not creds.get('scopes'):
+            creds['scopes'] = OAUTH_SCOPES.split()
+        creds.setdefault('subscriptionType', 'pro')
+        data['claudeAiOauth'] = creds
+        tmp = str(OAUTH_CREDENTIALS_FILE) + '.tmp'
+        Path(tmp).write_text(json.dumps(data, indent=2))
+        os.replace(tmp, OAUTH_CREDENTIALS_FILE)
+        try:
+            os.chmod(OAUTH_CREDENTIALS_FILE, 0o600)
+        except Exception:
+            pass
 
     async def poll_oauth_usage(self) -> Optional[dict]:
         """

@@ -6,7 +6,6 @@ Default port: 8080
 
 import asyncio
 import os
-import re as _re
 import subprocess
 import threading
 import time
@@ -334,108 +333,36 @@ def get_network_info():
 
 # ── Setup RPi ─────────────────────────────────────────────────────────────────
 
-# ── Claude Login (kiosk) ─────────────────────────────────────────────────────
+# ── Claude Login (OAuth nativo PKCE) ─────────────────────────────────────────
+# Nessuna dipendenza da `claude` CLI: il backend genera il link di
+# autorizzazione, l'utente autorizza su claude.ai e incolla il codice, il
+# backend lo scambia per i token e scrive ~/.claude/.credentials.json.
+# Robusto e replicabile su qualsiasi Pi (non dipende dalla versione del CLI).
 
-_login_url:    Optional[str] = None
-_login_status: str           = 'idle'   # idle|starting|waiting|success|error
-_login_proc                  = None
-_login_token_before: Optional[str] = None
-_login_needs_code: bool      = False    # True quando serve incollare il codice
-_login_message: Optional[str] = None    # messaggio per la UI (es. "codice non valido")
-
-
-def _read_access_token() -> Optional[str]:
-    """Legge l'accessToken corrente da .credentials.json (None se assente)."""
-    f = Path.home() / '.claude' / '.credentials.json'
-    try:
-        import json as _json
-        data = _json.loads(f.read_text())
-        return (data.get('claudeAiOauth') or {}).get('accessToken')
-    except Exception:
-        return None
+_login_status:   str           = 'idle'   # idle|waiting|success|error
+_login_url:      Optional[str] = None
+_login_verifier: Optional[str] = None
+_login_state:    Optional[str] = None
+_login_message:  Optional[str] = None
 
 
 @app.post('/api/login/start')
-async def start_claude_login():
-    global _login_url, _login_status, _login_proc, _login_token_before
-    global _login_needs_code, _login_message
-    if _login_status in ('waiting', 'starting'):
-        return {'ok': True, 'url': _login_url, 'status': _login_status,
-                'needs_code': _login_needs_code, 'message': _login_message}
-
-    _login_url = None
-    _login_needs_code = False
-    _login_message = None
-    _login_status = 'starting'
-    # Confronto sul contenuto del token, non sul mtime (che cambia anche per refresh falliti)
-    _login_token_before = _read_access_token()
-
-    def _run():
-        global _login_url, _login_status, _login_proc, _login_needs_code, _login_message
-        try:
-            env = os.environ.copy()
-            env['NO_COLOR'] = '1'
-            env['TERM'] = 'dumb'
-            # IMPORTANTE: stdin/stdout via PIPE (NON un PTY). Senza un terminale
-            # interattivo `claude auth login` stampa l'URL pulito su UNA riga, poi
-            # "Paste code here" e legge il codice da stdin. Con un PTY userebbe la
-            # TUI Ink, che colora e manda a capo l'URL a 80 colonne rompendo il
-            # parsing (è il motivo per cui il link non compariva sul kiosk).
-            # Niente DISPLAY: evita che claude apra un browser sopra il kiosk.
-            env.pop('DISPLAY', None)
-            env.pop('WAYLAND_DISPLAY', None)
-            # Claude Code >= 2.x: login = `claude auth login`; `--claudeai` salta
-            # il prompt di scelta metodo. Il vecchio `claude login` non esiste più.
-            _login_proc = subprocess.Popen(
-                ['claude', 'auth', 'login', '--claudeai'],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, bufsize=1, env=env,
-            )
-            for line in _login_proc.stdout:
-                print(f'[login] {line.rstrip()}')
-                m = _re.search(r'https?://[\w.-]+\.[a-z]{2,}\S*', line)
-                if m and not _login_url:
-                    _login_url = m.group().rstrip('.,)\'"')
-                    _login_status = 'waiting'
-                    # Questo flow richiede SEMPRE il codice: rivela subito il campo.
-                    # (il prompt "Paste code here >" non termina con \n, quindi non
-                    #  verrebbe mai catturato come riga a sé stante.)
-                    _login_needs_code = True
-                if _re.search(r'(?i)invalid code', line):
-                    _login_message = 'Codice non valido — ricopia il codice completo e riprova.'
-                # Successo SOLO se il token cambia davvero (non basta il mtime)
-                cur = _read_access_token()
-                if cur and cur != _login_token_before:
-                    _login_status = 'success'
-                    break
-            try:
-                _login_proc.wait(timeout=300)
-            except Exception:
-                pass
-            if _login_status != 'success':
-                cur = _read_access_token()
-                _login_status = 'success' if (cur and cur != _login_token_before) else 'error'
-        except Exception as e:
-            _login_status = 'error'
-            print(f'[login] errore: {e}')
-        finally:
-            _login_proc = None
-
-    threading.Thread(target=_run, daemon=True).start()
-    # Aspetta fino a 20s che appaia l'URL (RPi 3B+ è lento ad avviare claude)
-    for _ in range(40):
-        await asyncio.sleep(0.5)
-        if _login_url or _login_status == 'error':
-            break
-    return {'ok': True, 'url': _login_url, 'status': _login_status,
-            'needs_code': _login_needs_code, 'message': _login_message}
+def start_claude_login():
+    global _login_status, _login_url, _login_verifier, _login_state, _login_message
+    url, verifier, state = client.build_authorize_url()
+    _login_url      = url
+    _login_verifier = verifier
+    _login_state    = state
+    _login_message  = None
+    _login_status   = 'waiting'
+    return {'ok': True, 'url': url, 'status': 'waiting',
+            'needs_code': True, 'message': None}
 
 
 @app.get('/api/login/status')
 def get_login_status():
     return {'url': _login_url, 'status': _login_status,
-            'needs_code': _login_needs_code, 'message': _login_message}
+            'needs_code': _login_status == 'waiting', 'message': _login_message}
 
 
 class LoginCode(BaseModel):
@@ -443,35 +370,36 @@ class LoginCode(BaseModel):
 
 
 @app.post('/api/login/code')
-def submit_login_code(body: LoginCode):
-    """Inoltra il codice di autorizzazione (incollato dall'utente) allo stdin del
-    processo `claude auth login` in attesa."""
-    global _login_message
+async def submit_login_code(body: LoginCode):
+    """Scambia il codice incollato dall'utente per i token OAuth e li salva."""
+    global _login_status, _login_message
     code = (body.code or '').strip()
     if not code:
         return {'ok': False, 'reason': 'codice vuoto'}
-    if not (_login_proc and _login_proc.stdin):
-        return {'ok': False, 'reason': 'nessun login in corso'}
-    try:
+    if not _login_verifier:
+        return {'ok': False, 'reason': 'login non avviato — riparti da "Accedi"'}
+    res = await client.exchange_code(code, _login_verifier, _login_state or '')
+    if res.get('ok'):
+        _login_status  = 'success'
         _login_message = None
-        _login_proc.stdin.write(code + '\n')
-        _login_proc.stdin.flush()
-    except Exception as e:
-        return {'ok': False, 'reason': str(e)}
-    return {'ok': True}
+        # Poll immediato così la dashboard mostra subito i dati
+        try:
+            await do_poll()
+        except Exception:
+            pass
+        return {'ok': True}
+    _login_message = res.get('_error', 'scambio del codice fallito')
+    return {'ok': False, 'reason': _login_message}
 
 
 @app.post('/api/login/cancel')
 def cancel_login():
-    global _login_status, _login_proc, _login_needs_code, _login_message
-    if _login_proc:
-        try:
-            _login_proc.terminate()
-        except Exception:
-            pass
-    _login_needs_code = False
-    _login_message = None
-    _login_status = 'idle'
+    global _login_status, _login_url, _login_verifier, _login_state, _login_message
+    _login_status   = 'idle'
+    _login_url      = None
+    _login_verifier = None
+    _login_state    = None
+    _login_message  = None
     return {'ok': True}
 
 
