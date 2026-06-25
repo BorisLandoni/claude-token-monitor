@@ -1923,10 +1923,15 @@ async function _pollLoginStatus() {
       return;
     }
     if (data.url && !document.getElementById('login-url-text').textContent) {
-      // URL arrivato durante il polling (RPi lento): mostra il QR ora
+      // URL arrivato durante il polling (RPi lento): mostra il link ora
       _showLoginQr(data.url);
     }
     if (data.needs_code) _revealCodeInput();
+    if (data.message) {
+      const st = document.getElementById('login-modal-status');
+      st.style.color = 'var(--amber)';
+      st.textContent = '⚠ ' + data.message;
+    }
   } catch(e) {}
 }
 

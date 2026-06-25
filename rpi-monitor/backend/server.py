@@ -340,8 +340,8 @@ _login_url:    Optional[str] = None
 _login_status: str           = 'idle'   # idle|starting|waiting|success|error
 _login_proc                  = None
 _login_token_before: Optional[str] = None
-_login_needs_code: bool      = False    # True quando claude chiede di incollare il codice
-_login_master_fd: Optional[int] = None  # fd master del PTY (per inoltrare il codice)
+_login_needs_code: bool      = False    # True quando serve incollare il codice
+_login_message: Optional[str] = None    # messaggio per la UI (es. "codice non valido")
 
 
 def _read_access_token() -> Optional[str]:
@@ -358,97 +358,57 @@ def _read_access_token() -> Optional[str]:
 @app.post('/api/login/start')
 async def start_claude_login():
     global _login_url, _login_status, _login_proc, _login_token_before
-    global _login_needs_code, _login_master_fd
+    global _login_needs_code, _login_message
     if _login_status in ('waiting', 'starting'):
         return {'ok': True, 'url': _login_url, 'status': _login_status,
-                'needs_code': _login_needs_code}
+                'needs_code': _login_needs_code, 'message': _login_message}
 
     _login_url = None
     _login_needs_code = False
-    _login_master_fd = None
+    _login_message = None
     _login_status = 'starting'
     # Confronto sul contenuto del token, non sul mtime (che cambia anche per refresh falliti)
     _login_token_before = _read_access_token()
 
     def _run():
-        global _login_url, _login_status, _login_proc, _login_needs_code, _login_master_fd
-
-        def _scan(text: str):
-            """Estrae URL e capisce se claude sta chiedendo il codice."""
-            global _login_url, _login_status, _login_needs_code
-            m = _re.search(r'https?://[\w.-]+\.[a-z]{2,}\S*', text)
-            if m and not _login_url:
-                _login_url = m.group().rstrip('.,)\'"')
-                _login_status = 'waiting'
-            if not _login_needs_code and _re.search(
-                    r'(?i)(paste|incolla|enter the code|authoriz|codice)', text):
-                _login_needs_code = True
-
+        global _login_url, _login_status, _login_proc, _login_needs_code, _login_message
         try:
             env = os.environ.copy()
             env['NO_COLOR'] = '1'
-            # Niente DISPLAY: così claude NON può aprire un browser e ricade sul
-            # flusso "apri questo URL e incolla il codice" — l'unico utilizzabile
-            # quando si autorizza da telefono/altro PC (il callback su localhost
-            # del kiosk sarebbe irraggiungibile).
+            env['TERM'] = 'dumb'
+            # IMPORTANTE: stdin/stdout via PIPE (NON un PTY). Senza un terminale
+            # interattivo `claude auth login` stampa l'URL pulito su UNA riga, poi
+            # "Paste code here" e legge il codice da stdin. Con un PTY userebbe la
+            # TUI Ink, che colora e manda a capo l'URL a 80 colonne rompendo il
+            # parsing (è il motivo per cui il link non compariva sul kiosk).
+            # Niente DISPLAY: evita che claude apra un browser sopra il kiosk.
             env.pop('DISPLAY', None)
             env.pop('WAYLAND_DISPLAY', None)
             # Claude Code >= 2.x: login = `claude auth login`; `--claudeai` salta
             # il prompt di scelta metodo. Il vecchio `claude login` non esiste più.
-            cmd = ['claude', 'auth', 'login', '--claudeai']
-
-            if hasattr(os, 'openpty'):
-                # PTY: claude si comporta come in un terminale interattivo, quindi
-                # stampa l'URL + il prompt del codice e accetta il codice via stdin.
-                import select as _select
-                env['TERM'] = 'xterm-256color'
-                master_fd, slave_fd = os.openpty()
-                _login_master_fd = master_fd
-                _login_proc = subprocess.Popen(
-                    cmd, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd,
-                    env=env, close_fds=True, start_new_session=True,
-                )
-                os.close(slave_fd)
-                buf = b''
-                deadline = time.time() + 300
-                while time.time() < deadline:
-                    try:
-                        r, _, _ = _select.select([master_fd], [], [], 1.0)
-                    except (OSError, ValueError):
-                        break
-                    if r:
-                        try:
-                            chunk = os.read(master_fd, 4096)
-                        except OSError:
-                            chunk = b''
-                        if not chunk:
-                            break
-                        buf += chunk
-                        text = buf.decode('utf-8', 'replace')
-                        print(f'[login] …{text[-160:]!r}')
-                        _scan(text)
-                    cur = _read_access_token()
-                    if cur and cur != _login_token_before:
-                        _login_status = 'success'
-                        break
-                    if _login_proc.poll() is not None:
-                        break
-            else:
-                # Fallback senza PTY (Windows in sviluppo): pipe best-effort.
-                env['TERM'] = 'dumb'
-                _login_proc = subprocess.Popen(
-                    cmd, stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                    text=True, bufsize=1, env=env,
-                )
-                for line in _login_proc.stdout:
-                    print(f'[login] {line.rstrip()}')
-                    _scan(line)
-                    cur = _read_access_token()
-                    if cur and cur != _login_token_before:
-                        _login_status = 'success'
-                        break
-
+            _login_proc = subprocess.Popen(
+                ['claude', 'auth', 'login', '--claudeai'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, env=env,
+            )
+            for line in _login_proc.stdout:
+                print(f'[login] {line.rstrip()}')
+                m = _re.search(r'https?://[\w.-]+\.[a-z]{2,}\S*', line)
+                if m and not _login_url:
+                    _login_url = m.group().rstrip('.,)\'"')
+                    _login_status = 'waiting'
+                    # Questo flow richiede SEMPRE il codice: rivela subito il campo.
+                    # (il prompt "Paste code here >" non termina con \n, quindi non
+                    #  verrebbe mai catturato come riga a sé stante.)
+                    _login_needs_code = True
+                if _re.search(r'(?i)invalid code', line):
+                    _login_message = 'Codice non valido — ricopia il codice completo e riprova.'
+                # Successo SOLO se il token cambia davvero (non basta il mtime)
+                cur = _read_access_token()
+                if cur and cur != _login_token_before:
+                    _login_status = 'success'
+                    break
             try:
                 _login_proc.wait(timeout=300)
             except Exception:
@@ -460,12 +420,6 @@ async def start_claude_login():
             _login_status = 'error'
             print(f'[login] errore: {e}')
         finally:
-            if _login_master_fd is not None:
-                try:
-                    os.close(_login_master_fd)
-                except Exception:
-                    pass
-                _login_master_fd = None
             _login_proc = None
 
     threading.Thread(target=_run, daemon=True).start()
@@ -475,12 +429,13 @@ async def start_claude_login():
         if _login_url or _login_status == 'error':
             break
     return {'ok': True, 'url': _login_url, 'status': _login_status,
-            'needs_code': _login_needs_code}
+            'needs_code': _login_needs_code, 'message': _login_message}
 
 
 @app.get('/api/login/status')
 def get_login_status():
-    return {'url': _login_url, 'status': _login_status, 'needs_code': _login_needs_code}
+    return {'url': _login_url, 'status': _login_status,
+            'needs_code': _login_needs_code, 'message': _login_message}
 
 
 class LoginCode(BaseModel):
@@ -489,19 +444,18 @@ class LoginCode(BaseModel):
 
 @app.post('/api/login/code')
 def submit_login_code(body: LoginCode):
-    """Inoltra il codice di autorizzazione (incollato dall'utente) al processo
-    `claude auth login` in attesa, tramite il suo PTY/stdin."""
+    """Inoltra il codice di autorizzazione (incollato dall'utente) allo stdin del
+    processo `claude auth login` in attesa."""
+    global _login_message
     code = (body.code or '').strip()
     if not code:
         return {'ok': False, 'reason': 'codice vuoto'}
+    if not (_login_proc and _login_proc.stdin):
+        return {'ok': False, 'reason': 'nessun login in corso'}
     try:
-        if _login_master_fd is not None:
-            os.write(_login_master_fd, (code + '\n').encode())
-        elif _login_proc and _login_proc.stdin:
-            _login_proc.stdin.write(code + '\n')
-            _login_proc.stdin.flush()
-        else:
-            return {'ok': False, 'reason': 'nessun login in corso'}
+        _login_message = None
+        _login_proc.stdin.write(code + '\n')
+        _login_proc.stdin.flush()
     except Exception as e:
         return {'ok': False, 'reason': str(e)}
     return {'ok': True}
@@ -509,19 +463,14 @@ def submit_login_code(body: LoginCode):
 
 @app.post('/api/login/cancel')
 def cancel_login():
-    global _login_status, _login_proc, _login_needs_code, _login_master_fd
+    global _login_status, _login_proc, _login_needs_code, _login_message
     if _login_proc:
         try:
             _login_proc.terminate()
         except Exception:
             pass
-    if _login_master_fd is not None:
-        try:
-            os.close(_login_master_fd)
-        except Exception:
-            pass
-        _login_master_fd = None
     _login_needs_code = False
+    _login_message = None
     _login_status = 'idle'
     return {'ok': True}
 
