@@ -407,9 +407,13 @@ def cancel_login():
 
 @app.post('/api/restart')
 def restart_service():
+    """Riavvia il servizio SENZA sudo: il processo esce con codice non-zero e
+    systemd (Restart=on-failure|always) lo rilancia con il codice aggiornato.
+    Evita la dipendenza da sudo NOPASSWD, che non era configurata → il vecchio
+    `sudo systemctl restart` falliva in silenzio e il codice non si aggiornava."""
     def _do():
         time.sleep(1)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'claude-monitor'], timeout=30)
+        os._exit(3)
     threading.Thread(target=_do, daemon=True).start()
     return {'ok': True}
 
@@ -585,21 +589,28 @@ async def run_update():
                 return
 
             _update_log.append('\n[✓] Codice aggiornato\n')
-            _update_log.append('[→] Riavvio servizio + kiosk in background...\n')
+            _update_log.append('[→] Riavvio servizio...\n')
             _update_log.append('[✓] Servizio riavviato con successo!\n')
+            _update_running = False
 
-            # Detached: sopravvive al restart del processo corrente.
-            # Dopo aver riavviato il servizio, killa chromium per forzare
-            # un reload completo del kiosk con cache fresca.
-            subprocess.Popen(
-                ['bash', '-c',
-                 'sleep 2 && sudo systemctl restart claude-monitor && '
-                 'sleep 5 && pkill -f chromium'],
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                start_new_session=True,
-            )
+            # Reload del kiosk (cache fresca): processo separato, sopravvive
+            # al nostro exit. pkill sui propri chromium → nessun sudo.
+            try:
+                subprocess.Popen(
+                    ['bash', '-c', 'sleep 3 && pkill -f chromium'],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, start_new_session=True,
+                )
+            except Exception:
+                pass
+
+            # Auto-restart SENZA sudo: usciamo con codice non-zero e systemd
+            # (Restart=on-failure|always) rilancia il servizio col codice nuovo.
+            def _bye():
+                time.sleep(1.5)
+                os._exit(3)
+            threading.Thread(target=_bye, daemon=True).start()
+            return
         except Exception as e:
             _update_log.append(f'\n[✗] Errore: {e}\n')
         finally:

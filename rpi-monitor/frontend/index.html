@@ -1781,12 +1781,25 @@ function showUpdateToast() {
     secs--;
     if (secs <= 0) {
       clearInterval(tick);
-      // hard reload con cache bypass
-      window.location.href = '/?t=' + Date.now();
+      // Aspetta che il server sia di nuovo su, poi hard reload (cache bypass)
+      _reloadWhenUp();
     } else {
       secsEl.textContent = secs;
     }
   }, 1000);
+}
+
+// Durante un riavvio del servizio il backend è giù per qualche secondo:
+// fai polling su /health finché non risponde, poi ricarica (cache bypass).
+async function _reloadWhenUp() {
+  for (let i = 0; i < 40; i++) {
+    try {
+      const r = await fetch('/health', { cache: 'no-store' });
+      if (r.ok) { window.location.href = '/?t=' + Date.now(); return; }
+    } catch (e) { /* server ancora giù */ }
+    await new Promise(res => setTimeout(res, 1000));
+  }
+  window.location.href = '/?t=' + Date.now();
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

@@ -157,8 +157,10 @@ Type=simple
 User=$USER
 WorkingDirectory=$INSTALL_DIR/rpi-monitor/backend
 ExecStart=$VENV_DIR/bin/python server.py
-Restart=on-failure
-RestartSec=10
+# Restart=always: aggiornamenti e "Riavvia" funzionano senza sudo — il processo
+# esce con codice non-zero e systemd lo rilancia col codice aggiornato.
+Restart=always
+RestartSec=3
 StandardOutput=journal
 StandardError=journal
 
