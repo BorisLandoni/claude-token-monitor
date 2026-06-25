@@ -765,6 +765,21 @@ body { background: var(--bg); color: var(--text); }
          style="display:none;font-size:9px;color:var(--muted2);word-break:break-all;
                 text-align:center;max-width:290px;line-height:1.5;
                 user-select:all;cursor:text"></div>
+    <div id="login-code-wrap"
+         style="display:none;flex-direction:column;gap:8px;align-items:center;width:100%">
+      <div style="font-size:11px;color:var(--muted);text-align:center;line-height:1.5">
+        Dopo aver autorizzato, incolla qui il codice mostrato:
+      </div>
+      <input id="login-code-input" type="text" inputmode="text"
+             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+             placeholder="Incolla il codice…"
+             onkeydown="if(event.key==='Enter')submitLoginCode()"
+             style="width:100%;max-width:280px;padding:12px;border-radius:8px;
+                    border:1px solid var(--border);background:var(--surface2);
+                    color:var(--text);font-size:14px;text-align:center;outline:none" />
+      <button id="login-code-btn" class="btn-primary" style="width:100%;max-width:280px"
+              onclick="submitLoginCode()">Invia codice</button>
+    </div>
     <div style="display:flex;gap:8px;width:100%">
       <button class="btn-secondary" style="flex:1" onclick="closeLoginModal()">Annulla</button>
       <button id="login-done-btn" class="btn-primary" style="flex:1;display:none"
@@ -1794,7 +1809,7 @@ async function autoRefreshLogin() {
       help.innerHTML =
         '<b style="color:var(--red)">✗ Avvio login fallito:</b> ' + (e.message || e) +
         '<br><br>Fallback via SSH: <code style="background:var(--bg);padding:2px 6px;' +
-        'border-radius:4px">claude login</code>';
+        'border-radius:4px">claude auth login</code>';
     } finally {
       btn.disabled = false;
       btn.innerHTML = '→ &nbsp;Accedi a Claude';
@@ -1808,11 +1823,17 @@ async function autoRefreshLogin() {
     const r = await fetch('/api/poll', { method: 'POST' });
     await loadData();
     const acc = DATA.account || {};
-    if (acc.session_status === 'oauth_expired') {
-      // Refresh fallito → lancia `claude login` server-side e mostra QR/URL nel modal
+    if (acc.session_status === 'ok') {
+      // Refresh riuscito → connessione di nuovo attiva
+      help.style.display = '';
+      help.innerHTML = '<b style="color:var(--green)">✓ Connessione ripristinata!</b>';
+      setTimeout(() => { help.style.display = 'none'; }, 4000);
+    } else {
+      // Refresh non riuscito (token scaduto o nessun dato fresco) → nuova autenticazione:
+      // lancia `claude auth login` server-side e mostra URL/QR + campo codice nel modal
       help.style.display = '';
       help.innerHTML =
-        '<b style="color:var(--amber)">Refresh automatico fallito.</b><br>' +
+        '<b style="color:var(--amber)">Refresh automatico non riuscito.</b><br>' +
         'Avvio nuova autenticazione…';
       try {
         await startClaudeLogin();
@@ -1822,13 +1843,8 @@ async function autoRefreshLogin() {
           '<b style="color:var(--red)">✗ Avvio login fallito:</b> ' + (e.message || e) +
           '<br><br>Fallback manuale: <code style="background:var(--bg);padding:2px 6px;' +
           'border-radius:4px">ssh pi@raspberrypi.local</code> <code style="background:' +
-          'var(--bg);padding:2px 6px;border-radius:4px">claude login</code>';
+          'var(--bg);padding:2px 6px;border-radius:4px">claude auth login</code>';
       }
-    } else {
-      // Refresh riuscito → resetta UI
-      help.style.display = '';
-      help.innerHTML = '<b style="color:var(--green)">✓ Connessione ripristinata!</b>';
-      setTimeout(() => { help.style.display = 'none'; }, 4000);
     }
   } catch(e) {
     help.style.display = '';
@@ -1851,6 +1867,8 @@ async function startClaudeLogin() {
   document.getElementById('login-modal-status').textContent = '⟳ Avvio autenticazione…';
   document.getElementById('login-url-text').style.display = 'none';
   document.getElementById('login-done-btn').style.display = 'none';
+  document.getElementById('login-code-wrap').style.display = 'none';
+  document.getElementById('login-code-input').value = '';
 
   try {
     const res  = await fetch('/api/login/start', { method: 'POST' });
@@ -1861,10 +1879,12 @@ async function startClaudeLogin() {
     }
     if (data.url) {
       _showLoginQr(data.url);
-    } else if (data.status === 'error') {
+    }
+    if (data.needs_code) _revealCodeInput();
+    if (!data.url && data.status === 'error') {
       document.getElementById('login-modal-status').style.color = 'var(--red)';
       document.getElementById('login-modal-status').textContent =
-        '✗ Impossibile avviare claude login.\nUsa SSH: claude login';
+        '✗ Impossibile avviare il login.\nUsa SSH: claude auth login';
       return;
     }
     // status è 'starting' o 'waiting': continua a fare polling
@@ -1893,21 +1913,64 @@ async function _pollLoginStatus() {
     if (data.status === 'success') {
       clearInterval(_loginPollTimer); _loginPollTimer = null;
       _onLoginSuccess();
-    } else if (data.status === 'error') {
+      return;
+    }
+    if (data.status === 'error') {
       clearInterval(_loginPollTimer); _loginPollTimer = null;
       document.getElementById('login-modal-status').style.color = 'var(--red)';
       document.getElementById('login-modal-status').textContent =
         '✗ Autenticazione fallita. Riprova.';
-    } else if (data.url && !document.getElementById('login-url-text').textContent) {
+      return;
+    }
+    if (data.url && !document.getElementById('login-url-text').textContent) {
       // URL arrivato durante il polling (RPi lento): mostra il QR ora
       _showLoginQr(data.url);
     }
+    if (data.needs_code) _revealCodeInput();
   } catch(e) {}
+}
+
+function _revealCodeInput() {
+  const w = document.getElementById('login-code-wrap');
+  if (w.style.display !== 'flex') {
+    w.style.display = 'flex';
+    document.getElementById('login-code-input').focus();
+  }
+}
+
+async function submitLoginCode() {
+  const input = document.getElementById('login-code-input');
+  const btn   = document.getElementById('login-code-btn');
+  const status = document.getElementById('login-modal-status');
+  const code  = (input.value || '').trim();
+  if (!code) { input.focus(); return; }
+  btn.disabled = true; btn.textContent = '⟳ Invio…';
+  try {
+    const r = await fetch('/api/login/code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    }).then(r => r.json());
+    if (!r.ok) {
+      status.style.color = 'var(--red)';
+      status.textContent = '✗ ' + (r.reason || 'invio del codice fallito');
+    } else {
+      status.style.color = 'var(--amber)';
+      status.textContent = '⟳ Verifica del codice…';
+      input.value = '';
+    }
+  } catch(e) {
+    status.style.color = 'var(--red)';
+    status.textContent = '✗ Errore: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Invia codice';
+  }
 }
 
 function _onLoginSuccess() {
   document.getElementById('login-url-link').style.display = 'none';
   document.getElementById('login-url-text').style.display = 'none';
+  document.getElementById('login-code-wrap').style.display = 'none';
   document.getElementById('login-modal-status').style.color = 'var(--green)';
   document.getElementById('login-modal-status').innerHTML =
     '<span style="font-size:32px;display:block;margin-bottom:6px">✓</span>Login completato!';
@@ -1924,6 +1987,8 @@ function closeLoginModal() {
   clearInterval(_loginPollTimer); _loginPollTimer = null;
   fetch('/api/login/cancel', { method: 'POST' }).catch(() => {});
   document.getElementById('login-modal').classList.remove('show');
+  document.getElementById('login-code-wrap').style.display = 'none';
+  document.getElementById('login-code-input').value = '';
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

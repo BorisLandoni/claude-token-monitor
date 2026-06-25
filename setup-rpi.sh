@@ -86,7 +86,7 @@ else
 fi
 
 # ── 4. Login Claude Code ──────────────────────────────────────
-# NOTA: non lanciamo "claude login" dallo script perché apre la UI
+# NOTA: non lanciamo "claude auth login" dallo script perché apre la UI
 # interattiva e blocca l'esecuzione. L'utente deve farlo prima o dopo.
 step "Verifica credenziali Claude Code..."
 CRED_FILE="$HOME/.claude/.credentials.json"
@@ -98,7 +98,7 @@ else
     echo ""
     echo -e "  ${YELLOW}${BOLD}AZIONE RICHIESTA:${RESET}"
     echo -e "  Apri un ${BOLD}secondo terminale${RESET} e digita:"
-    echo -e "    ${CYAN}claude login${RESET}"
+    echo -e "    ${CYAN}claude auth login${RESET}"
     echo "  Accedi con il browser, poi torna qui e premi INVIO per continuare."
     echo ""
     if [ "$NON_INTERACTIVE" = "0" ]; then
@@ -107,7 +107,7 @@ else
             ok "Credenziali trovate — login completato"
         else
             warn "Credenziali ancora non trovate — il monitor potrebbe non funzionare."
-            warn "Puoi fare 'claude login' manualmente dopo il setup."
+            warn "Puoi fare 'claude auth login' manualmente dopo il setup."
         fi
     fi
 fi

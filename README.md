@@ -25,7 +25,7 @@ Claude.ai (web / desktop / mobile / VS Code / Claude Code)
       Dashboard touch — 3 pagine
 ```
 
-Il monitor legge l'**OAuth token di Claude Code** da `~/.claude/.credentials.json` e chiama `https://api.anthropic.com/api/oauth/usage`. Quando l'access token scade, il backend usa il `refresh_token` per rinnovarlo **automaticamente**, senza interazione utente — finché il refresh_token rimane valido (settimane). Solo quando anche quello scade serve un nuovo login, che si fa **dal touch del monitor** (IMPOSTAZIONI → Accedi a Claude) o, in alternativa, via SSH con `claude login`.
+Il monitor legge l'**OAuth token di Claude Code** da `~/.claude/.credentials.json` e chiama `https://api.anthropic.com/api/oauth/usage`. Quando l'access token scade, il backend usa il `refresh_token` per rinnovarlo **automaticamente**, senza interazione utente — finché il refresh_token rimane valido (settimane). Solo quando anche quello scade serve un nuovo login, che si fa **dal touch del monitor** (IMPOSTAZIONI → Accedi a Claude) o, in alternativa, via SSH con `claude auth login`.
 
 ---
 
@@ -74,7 +74,7 @@ Dopo il setup:
 ### Primo login (dal monitor, senza SSH)
 
 Al primo avvio devi collegare **una sola volta** il tuo account Claude, direttamente dal touch:
-**IMPOSTAZIONI → Accedi a Claude** → si apre un link di autenticazione da aprire sul telefono/PC → autorizzi su `claude.ai` → **Riavvia Servizio**. Fatto: da quel momento il monitor rinnova il token da solo per settimane. (In alternativa, via SSH: `claude login`.)
+**IMPOSTAZIONI → Accedi a Claude** → si apre un link di autenticazione da aprire sul telefono/PC → autorizzi su `claude.ai` → **Riavvia Servizio**. Fatto: da quel momento il monitor rinnova il token da solo per settimane. (In alternativa, via SSH: `claude auth login`.)
 
 Guida passo-passo completa (flash SD, WiFi, SSH, troubleshooting) → [GUIDA-RASPBERRY.md](GUIDA-RASPBERRY.md)
 

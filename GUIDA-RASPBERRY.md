@@ -231,7 +231,7 @@ Lo script fa automaticamente tutto:
 | Cosa fa | Dettaglio |
 |---|---|
 | Installa dipendenze di sistema | `python3`, librerie grafiche, Chromium |
-| Installa Node.js + **Claude Code CLI** | Per l'autenticazione OAuth (`claude login`) |
+| Installa Node.js + **Claude Code CLI** | Per l'autenticazione OAuth (`claude auth login`) |
 | Crea ambiente virtuale Python | In `rpi-monitor/backend/.venv` |
 | Installa pacchetti Python | FastAPI, uvicorn, httpx, pydantic |
 | Configura il **display 5" + touch resistivo** | `hdmi_cvt 800 480` + overlay `ads7846` + calibrazione X11 |
@@ -263,7 +263,7 @@ Il modo più semplice è **direttamente dal touch del monitor**:
 3. Dopo qualche secondo compare un **link di autenticazione**: aprilo dal telefono o dal PC, accedi a `claude.ai` con il tuo account e autorizza
 4. Il monitor rileva l'accesso, mostra **"Login completato"** → premi **Riavvia Servizio**
 
-> In alternativa, via SSH: `claude login` (apre un URL da autorizzare nel browser), poi `sudo systemctl restart claude-monitor`.
+> In alternativa, via SSH: `claude auth login` (apre un URL da autorizzare nel browser), poi `sudo systemctl restart claude-monitor`.
 
 ### 7.1 Apri la dashboard dal PC
 
@@ -295,7 +295,7 @@ Se vedi "Token OAuth scaduto" o dati `—`:
 2. Premi **Riprova Connessione** → il backend tenta il refresh automatico
 3. Se anche il refresh fallisce (raro, solo dopo settimane di inattività), apri terminale SSH e fai:
    ```bash
-   claude login
+   claude auth login
    ```
    Poi torna in dashboard e premi di nuovo **Riprova Connessione**.
 
@@ -418,7 +418,7 @@ Quando vedi **⚠ Token OAuth scaduto** in Impostazioni:
 1. Premi **Riprova Connessione** → tenta refresh automatico via `refresh_token`
 2. Se fallisce, SSH al RPi ed esegui:
    ```bash
-   claude login
+   claude auth login
    ```
 3. Torna in dashboard, **Riprova Connessione**
 
@@ -539,7 +539,7 @@ Il refresh automatico tramite `refresh_token` di solito risolve da solo. Se rima
 1. **Riprova Connessione** in Impostazioni: tenta refresh + retry
 2. Se fallisce, via SSH:
    ```bash
-   claude login
+   claude auth login
    sudo systemctl restart claude-monitor
    ```
 3. Verifica che `claude` CLI sia installato: `which claude`

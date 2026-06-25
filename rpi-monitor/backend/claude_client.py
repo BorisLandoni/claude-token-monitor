@@ -34,6 +34,7 @@ class ClaudeClient:
 
     _oauth_last_call: float = 0        # timestamp ultima chiamata riuscita
     _oauth_retry_after: float = 0      # timestamp fino a quando NON chiamare (dopo 429)
+    _oauth_refresh_retry_after: float = 0  # backoff sull'endpoint di refresh (dopo 429)
     last_raw_oauth: Optional[dict] = None  # ultima risposta OAuth grezza (per debug)
 
     # ── OAuth (Claude Code credentials) ───────────────────────────────────────
@@ -75,6 +76,13 @@ class ClaudeClient:
         if not rt:
             print('[oauth] refresh: nessun refresh_token disponibile')
             return False
+        # Backoff: dopo un 429 sul refresh, non ribattere subito (evita di
+        # auto-infliggersi il rate limit chiamando ogni 60s con token scaduto).
+        now = time.time()
+        if now < self._oauth_refresh_retry_after:
+            wait = int(self._oauth_refresh_retry_after - now)
+            print(f'[oauth] refresh in backoff — riprovo tra {wait}s')
+            return False
         try:
             async with httpx.AsyncClient(timeout=20.0) as cli:
                 resp = await cli.post(
@@ -86,6 +94,10 @@ class ClaudeClient:
                     },
                     headers={'Content-Type': 'application/json'},
                 )
+            if resp.status_code == 429:
+                self._oauth_refresh_retry_after = time.time() + OAUTH_BACKOFF_429 * 4
+                print(f'[oauth] refresh 429 — backoff {OAUTH_BACKOFF_429 * 4}s')
+                return False
             if resp.status_code != 200:
                 print(f'[oauth] refresh fallito HTTP {resp.status_code}: {resp.text[:300]}')
                 return False
@@ -154,7 +166,7 @@ class ClaudeClient:
                             },
                         )
                 else:
-                    print('[oauth] refresh fallito — necessario claude login manuale')
+                    print('[oauth] refresh fallito — necessario "claude auth login" manuale')
                     return {'_error': 'oauth_expired'}
             if resp.status_code == 401:
                 # Anche dopo refresh 401 → veramente scaduto
