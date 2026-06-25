@@ -413,6 +413,10 @@ def restart_service():
     `sudo systemctl restart` falliva in silenzio e il codice non si aggiornava."""
     def _do():
         time.sleep(1)
+        try:
+            subprocess.run(['sync'], timeout=10)  # flush su SD: evita corruzioni
+        except Exception:
+            pass
         os._exit(3)
     threading.Thread(target=_do, daemon=True).start()
     return {'ok': True}
@@ -608,6 +612,12 @@ async def run_update():
             # (Restart=on-failure|always) rilancia il servizio col codice nuovo.
             def _bye():
                 time.sleep(1.5)
+                try:
+                    # flush su SD: i file appena scritti da git reset vengono
+                    # forzati su disco PRIMA del riavvio → niente repo corrotto.
+                    subprocess.run(['sync'], timeout=15)
+                except Exception:
+                    pass
                 os._exit(3)
             threading.Thread(target=_bye, daemon=True).start()
             return
