@@ -593,21 +593,14 @@ async def run_update():
                 return
 
             _update_log.append('\n[✓] Codice aggiornato\n')
-            _update_log.append('[→] Riavvio servizio...\n')
-            _update_log.append('[✓] Servizio riavviato con successo!\n')
+            _update_log.append('[→] Riavvio del servizio in corso...\n')
+            _update_log.append('[i] La pagina si ricarica da sola appena il servizio torna su.\n')
             _update_running = False
 
-            # Reload del kiosk (cache fresca): processo separato, sopravvive
-            # al nostro exit. pkill sui propri chromium → nessun sudo.
-            try:
-                subprocess.Popen(
-                    ['bash', '-c', 'sleep 3 && pkill -f chromium'],
-                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL, start_new_session=True,
-                )
-            except Exception:
-                pass
-
+            # NB: niente `pkill chromium`. La pagina del monitor aspetta /health
+            # (_reloadWhenUp) e si ricarica da sola: così il kiosk NON naviga su
+            # localhost mentre il backend è giù, evitando la schermata
+            # "ERR_CONNECTION_REFUSED".
             # Auto-restart SENZA sudo: usciamo con codice non-zero e systemd
             # (Restart=on-failure|always) rilancia il servizio col codice nuovo.
             def _bye():

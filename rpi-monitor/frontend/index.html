@@ -742,8 +742,8 @@ body { background: var(--bg); color: var(--text); }
   <div class="toast-row">
     <div class="toast-icon">✓</div>
     <div>
-      <div class="toast-msg-main">Aggiornamento completato!</div>
-      <div class="toast-msg-sub">Ricarico tra <span id="toast-secs">5</span>s…</div>
+      <div class="toast-msg-main">Aggiornamento installato</div>
+      <div class="toast-msg-sub" id="toast-sub">Riavvio del servizio · ricarico tra <span id="toast-secs">5</span>s…</div>
     </div>
   </div>
   <div class="toast-bar"><div id="toast-bar-fill"></div></div>
@@ -1729,8 +1729,17 @@ let _updateInProgress = false;
 async function runUpdate() {
   const btn   = document.getElementById('update-btn');
   const logEl = document.getElementById('update-log');
+  const status= document.getElementById('update-status');
   btn.disabled = true; btn.textContent = '⟳ Aggiornamento…';
   logEl.style.display = ''; logEl.textContent = 'Avvio…\n';
+  // Spiega cosa succederà: il servizio si riavvia e la pagina si ricarica da sola
+  if (status) {
+    status.style.display = '';
+    status.style.color = 'var(--amber)';
+    status.innerHTML = 'ℹ️ Scarico e riavvio il servizio. Per ~10 secondi lo schermo ' +
+      'resta fermo, poi <b>la pagina si ricarica da sola</b>. È normale: ' +
+      '<b>non spegnere il Pi</b> e non toccare nulla.';
+  }
   _updateInProgress = false;
   try {
     const res  = await fetch('/api/update', { method: 'POST' });
@@ -1811,6 +1820,8 @@ function showUpdateToast() {
 // Durante un riavvio del servizio il backend è giù per qualche secondo:
 // fai polling su /health finché non risponde, poi ricarica (cache bypass).
 async function _reloadWhenUp() {
+  const sub = document.getElementById('toast-sub');
+  if (sub) sub.textContent = 'Attendo il riavvio del servizio…';
   for (let i = 0; i < 40; i++) {
     try {
       const r = await fetch('/health', { cache: 'no-store' });
