@@ -317,6 +317,7 @@ while true; do
     echo "[$(date '+%F %T')] Lancio $BROWSER_BIN  ozone=$OZONE"
     # shellcheck disable=SC2086
     "$BROWSER_BIN" $OZONE \
+        --disable-gpu --disable-gpu-compositing \
         --kiosk --noerrdialogs --disable-infobars \
         --no-first-run --disable-session-crashed-bubble \
         --disable-translate --overscroll-history-navigation=0 \
