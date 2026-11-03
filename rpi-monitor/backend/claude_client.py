@@ -312,6 +312,11 @@ class ClaudeClient:
 
             # Sessione 5h
             fh = data.get('five_hour') or {}
+            if not fh:
+                # five_hour null = nessuna finestra 5h attiva (nessun messaggio
+                # nelle ultime 5 ore): sessione a 0%, non "dati mancanti".
+                out['session_pct_used']      = 0
+                out['session_pct_remaining'] = 100
             if fh.get('utilization') is not None:
                 spct = _to_pct(fh['utilization'])
                 out['session_pct_used']      = spct

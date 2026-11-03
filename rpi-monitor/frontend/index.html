@@ -456,6 +456,23 @@ body { background: var(--bg); color: var(--text); }
 #login-qr-wrap img { width:180px; height:180px; display:block; }
 #login-qr-spinner { font-size:12px; color:var(--muted); animation:spin .7s linear infinite; }
 #login-modal-status { font-size:11px; text-align:center; line-height:1.6; }
+#wifi-modal {
+  position:fixed; inset:0; z-index:2000;
+  background:rgba(5,13,22,.88); backdrop-filter:blur(6px);
+  display:none; align-items:center; justify-content:center;
+}
+#wifi-modal.show { display:flex; }
+.wifi-input {
+  width:100%; padding:11px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface2); color:var(--text); font-size:14px; outline:none;
+}
+.wifi-net {
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  padding:9px 12px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface2); color:var(--text); font-size:13px; cursor:pointer; text-align:left;
+}
+.wifi-net.use { border-color:var(--green); }
+.wifi-net span.sig { color:var(--muted); font-size:11px; flex:0 0 auto; }
 </style>
 </head>
 <body>
@@ -694,6 +711,12 @@ body { background: var(--bg); color: var(--text); }
         </div>
       </div>
 
+      <div class="field">
+        <label>WiFi</label>
+        <div id="wifi-card" class="info-card" style="font-size:11px;line-height:1.6">Verifica…</div>
+        <button class="btn-secondary" onclick="openWifiModal()">&#128246; &nbsp;Configura WiFi</button>
+      </div>
+
       <div class="info-card">
         <strong>Accedi da PC o telefono:</strong><br>
         <strong id="server-url">http://raspberrypi.local:8080</strong>
@@ -747,6 +770,31 @@ body { background: var(--bg); color: var(--text); }
     </div>
   </div>
   <div class="toast-bar"><div id="toast-bar-fill"></div></div>
+</div>
+
+<!-- ── WiFi Modal ─────────────────────────────────────────────────────────── -->
+<div id="wifi-modal">
+  <div class="login-modal-box" style="width:360px">
+    <div class="login-modal-title">CONFIGURA WIFI</div>
+    <div id="wifi-now" style="font-size:11px;color:var(--muted);text-align:center"></div>
+    <div id="wifi-list" style="width:100%;max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
+    <div id="wifi-form" style="display:none;width:100%;flex-direction:column;gap:8px">
+      <input id="wifi-ssid" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="Nome rete (SSID)" class="wifi-input" />
+      <input id="wifi-pass" type="password" autocomplete="off" placeholder="Password"
+             onkeydown="if(event.key==='Enter')wifiConnect()" class="wifi-input" />
+      <button id="wifi-connect-btn" class="btn-primary" onclick="wifiConnect()">Connetti</button>
+    </div>
+    <div id="wifi-msg" style="font-size:11px;text-align:center;line-height:1.6;color:var(--muted)"></div>
+    <div style="font-size:10px;color:var(--muted2);text-align:center;line-height:1.5">
+      Il monitor non ha tastiera: per scrivere la password apri questa pagina da PC o telefono.
+    </div>
+    <div style="display:flex;gap:8px;width:100%">
+      <button class="btn-secondary" style="flex:1" onclick="wifiScan()">&#8635; Cerca</button>
+      <button class="btn-secondary" style="flex:1" onclick="wifiManual()">Rete nascosta</button>
+      <button class="btn-secondary" style="flex:1" onclick="closeWifiModal()">Chiudi</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── Login Modal ────────────────────────────────────────────────────────── -->
@@ -1368,7 +1416,7 @@ function go(page) {
   document.querySelector(`.nav-tab[data-page="${page}"]`).classList.add('active');
   render();
   if (page === 'now') drawSparkline();
-  if (page === 'settings') loadVersionInfo();
+  if (page === 'settings') { loadVersionInfo(); loadWifiStatus(); }
 }
 
 function render() {
@@ -1895,6 +1943,117 @@ async function autoRefreshLogin() {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '↺ &nbsp;Riprova Connessione';
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   WIFI — stato, scansione e connessione (nmcli sul Pi)
+   ════════════════════════════════════════════════════════════════════════ */
+function _wifiMsg(t, color) {
+  const m = document.getElementById('wifi-msg');
+  m.style.color = color || 'var(--muted)';
+  m.textContent = t;
+}
+
+function _wifiDescribe(st) {
+  if (!st || !st.available) return 'WiFi non gestibile (' + ((st && st.error) || 'NetworkManager assente') + ')';
+  const eth = st.ethernet ? ' · cavo LAN collegato' : '';
+  if (st.ssid) return 'Connesso a ' + st.ssid + (st.ip ? ' (' + st.ip + ')' : '') + eth;
+  return 'WiFi non connesso' + eth;
+}
+
+async function loadWifiStatus() {
+  const card = document.getElementById('wifi-card');
+  if (!card) return null;
+  try {
+    const st = await fetch('/api/wifi/status').then(r => r.json());
+    card.textContent = _wifiDescribe(st);
+    return st;
+  } catch (e) {
+    card.textContent = 'Stato WiFi non disponibile';
+    return null;
+  }
+}
+
+function openWifiModal() {
+  document.getElementById('wifi-modal').classList.add('show');
+  document.getElementById('wifi-form').style.display = 'none';
+  document.getElementById('wifi-pass').value = '';
+  _wifiMsg('');
+  loadWifiStatus().then(st => { document.getElementById('wifi-now').textContent = _wifiDescribe(st); });
+  wifiScan();
+}
+
+function closeWifiModal() {
+  document.getElementById('wifi-modal').classList.remove('show');
+  loadWifiStatus();
+}
+
+async function wifiScan() {
+  const list = document.getElementById('wifi-list');
+  list.textContent = '';
+  _wifiMsg('⟳ Ricerca reti…');
+  try {
+    const r = await fetch('/api/wifi/scan').then(x => x.json());
+    if (!r.ok) { _wifiMsg('✗ ' + (r.error || 'scansione fallita'), 'var(--red)'); return; }
+    _wifiMsg(r.networks.length ? 'Tocca una rete' : 'Nessuna rete trovata');
+    r.networks.forEach(n => {
+      const b = document.createElement('button');
+      b.className = 'wifi-net' + (n.in_use ? ' use' : '');
+      const name = document.createElement('div');
+      name.textContent = (n.secure ? '🔒 ' : '') + n.ssid + (n.in_use ? '  ✓' : '');
+      const sig = document.createElement('span');
+      sig.className = 'sig';
+      sig.textContent = n.signal + '%';
+      b.append(name, sig);
+      b.onclick = () => wifiPick(n);
+      list.appendChild(b);
+    });
+  } catch (e) {
+    _wifiMsg('✗ Errore: ' + e.message, 'var(--red)');
+  }
+}
+
+function wifiPick(n) {
+  document.getElementById('wifi-form').style.display = 'flex';
+  document.getElementById('wifi-ssid').value = n.ssid;
+  document.getElementById('wifi-pass').style.display = n.secure ? '' : 'none';
+  document.getElementById('wifi-pass').value = '';
+  _wifiMsg(n.secure ? 'Inserisci la password' : 'Rete aperta');
+}
+
+function wifiManual() {
+  document.getElementById('wifi-form').style.display = 'flex';
+  document.getElementById('wifi-ssid').value = '';
+  document.getElementById('wifi-pass').style.display = '';
+  document.getElementById('wifi-ssid').focus();
+}
+
+async function wifiConnect() {
+  const ssid = document.getElementById('wifi-ssid').value.trim();
+  const password = document.getElementById('wifi-pass').value;
+  if (!ssid) { _wifiMsg('✗ Inserisci il nome della rete', 'var(--red)'); return; }
+  const btn = document.getElementById('wifi-connect-btn');
+  btn.disabled = true;
+  _wifiMsg('⟳ Connessione a ' + ssid + '… (fino a 60s)', 'var(--amber)');
+  try {
+    const r = await fetch('/api/wifi/connect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ssid, password }),
+    }).then(x => x.json());
+    if (r.ok) {
+      _wifiMsg('✓ Connesso a ' + (r.ssid || ssid) + (r.ip ? ' · IP ' + r.ip : ''), 'var(--green)');
+      document.getElementById('wifi-now').textContent = _wifiDescribe(r);
+      document.getElementById('wifi-form').style.display = 'none';
+      loadWifiStatus();
+    } else {
+      _wifiMsg('✗ ' + (r.reason || 'connessione fallita'), 'var(--red)');
+    }
+  } catch (e) {
+    // Se stai usando proprio il WiFi, il cambio di rete interrompe la risposta
+    _wifiMsg('Connessione interrotta: se hai cambiato rete, riapri la pagina al nuovo indirizzo.', 'var(--amber)');
+  } finally {
+    btn.disabled = false;
   }
 }
 

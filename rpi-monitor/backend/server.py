@@ -335,6 +335,119 @@ def get_network_info():
     }
 
 
+# ── WiFi (NetworkManager / nmcli) ─────────────────────────────────────────────
+
+class WifiConnect(BaseModel):
+    ssid: str
+    password: Optional[str] = ''
+    hidden: Optional[bool] = False
+
+
+def _nmcli(args: list, timeout: int = 20) -> tuple:
+    """Esegue nmcli senza shell. Ritorna (returncode, output)."""
+    try:
+        r = subprocess.run(['nmcli', *args], capture_output=True, text=True, timeout=timeout)
+        return r.returncode, (r.stdout or '') + (r.stderr or '')
+    except FileNotFoundError:
+        return 127, 'nmcli non trovato (NetworkManager non installato)'
+    except subprocess.TimeoutExpired:
+        return 124, 'timeout'
+
+
+def _split_t(line: str) -> list:
+    """Divide una riga `nmcli -t` rispettando i ':' escapati con backslash."""
+    parts, cur, i = [], '', 0
+    while i < len(line):
+        ch = line[i]
+        if ch == '\\' and i + 1 < len(line):
+            cur += line[i + 1]
+            i += 2
+            continue
+        if ch == ':':
+            parts.append(cur)
+            cur = ''
+        else:
+            cur += ch
+        i += 1
+    parts.append(cur)
+    return parts
+
+
+@app.get('/api/wifi/status')
+def wifi_status():
+    rc, out = _nmcli(['-t', '-f', 'DEVICE,TYPE,STATE,CONNECTION', 'device'])
+    if rc != 0:
+        return {'available': False, 'error': out.strip()}
+    res = {'available': True, 'wifi_device': None, 'ssid': None,
+           'wifi_state': None, 'ethernet': False, 'ip': None}
+    for line in out.splitlines():
+        dev, typ, state, conn = (_split_t(line) + ['', '', '', ''])[:4]
+        if typ == 'wifi' and not res['wifi_device']:
+            res['wifi_device'], res['wifi_state'] = dev, state
+            if state == 'connected':
+                res['ssid'] = conn
+        elif typ == 'ethernet' and state == 'connected':
+            res['ethernet'] = True
+    if res['wifi_device'] and res['ssid']:
+        rc, ip = _nmcli(['-t', '-g', 'IP4.ADDRESS', 'device', 'show', res['wifi_device']])
+        if rc == 0 and ip.strip():
+            res['ip'] = ip.strip().splitlines()[0].split('/')[0]
+    return res
+
+
+@app.get('/api/wifi/scan')
+def wifi_scan():
+    _nmcli(['radio', 'wifi', 'on'])
+    rc, out = _nmcli(['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY',
+                      'device', 'wifi', 'list', '--rescan', 'yes'], timeout=30)
+    if rc != 0:
+        return {'ok': False, 'error': out.strip(), 'networks': []}
+    best: dict = {}
+    for line in out.splitlines():
+        inuse, ssid, sig, sec = (_split_t(line) + ['', '', '', ''])[:4]
+        if not ssid:
+            continue
+        try:
+            sig = int(sig)
+        except ValueError:
+            sig = 0
+        n = {'ssid': ssid, 'signal': sig, 'secure': bool(sec and sec != '--'),
+             'in_use': inuse.strip() == '*'}
+        cur = best.get(ssid)
+        if not cur or n['in_use'] or (not cur['in_use'] and sig > cur['signal']):
+            best[ssid] = n
+    nets = sorted(best.values(), key=lambda n: (not n['in_use'], -n['signal']))
+    return {'ok': True, 'networks': nets}
+
+
+@app.post('/api/wifi/connect')
+def wifi_connect(body: WifiConnect):
+    ssid = (body.ssid or '').strip()
+    if not ssid:
+        return {'ok': False, 'reason': 'SSID mancante'}
+    _nmcli(['radio', 'wifi', 'on'])
+    args = ['device', 'wifi', 'connect', ssid]
+    if body.password:
+        args += ['password', body.password]
+    if body.hidden:
+        args += ['hidden', 'yes']
+    rc, out = _nmcli(args, timeout=60)
+    if rc != 0:
+        msg = out.strip()
+        if body.password:
+            msg = msg.replace(body.password, '***')   # la password non finisce nei log
+        print(f'[wifi] connessione a "{ssid}" fallita: {msg[:200]}')
+        return {'ok': False, 'reason': msg[:200] or 'connessione fallita'}
+    print(f'[wifi] connesso a "{ssid}"')
+    return {'ok': True, **wifi_status()}
+
+
+@app.post('/api/wifi/forget')
+def wifi_forget(body: WifiConnect):
+    rc, out = _nmcli(['connection', 'delete', 'id', body.ssid])
+    return {'ok': rc == 0, 'reason': None if rc == 0 else out.strip()[:200]}
+
+
 # ── Setup RPi ─────────────────────────────────────────────────────────────────
 
 # ── Claude Login (OAuth nativo PKCE) ─────────────────────────────────────────
