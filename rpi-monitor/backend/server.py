@@ -437,6 +437,12 @@ def wifi_connect(body: WifiConnect):
         if body.password:
             msg = msg.replace(body.password, '***')   # la password non finisce nei log
         print(f'[wifi] connessione a "{ssid}" fallita: {msg[:200]}')
+        if 'not authorized' in msg.lower():
+            return {'ok': False, 'reason': (
+                'Permessi mancanti: sul Raspberry (SSH/terminale) esegui una volta '
+                'bash ~/claude-token-monitor/fix-wifi-permessi.sh e riprova.')}
+        if 'secrets were required' in msg.lower() or '802-11-wireless-security' in msg.lower():
+            return {'ok': False, 'reason': 'Password errata o non valida'}
         return {'ok': False, 'reason': msg[:200] or 'connessione fallita'}
     print(f'[wifi] connesso a "{ssid}"')
     return {'ok': True, **wifi_status()}

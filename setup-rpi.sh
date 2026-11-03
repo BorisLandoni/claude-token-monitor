@@ -168,6 +168,9 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
+# Permessi per configurare il WiFi dal monitor (polkit/NetworkManager)
+bash "$INSTALL_DIR/fix-wifi-permessi.sh" || warn "Permessi WiFi non configurati (opzionale)"
+
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
