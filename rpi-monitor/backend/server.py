@@ -782,7 +782,9 @@ def get_update_log_ep():
 
 @app.get('/')
 def index():
-    return FileResponse(FRONTEND_DIR / 'index.html')
+    # no-store: il kiosk non deve mai riusare una copia vecchia della pagina
+    return FileResponse(FRONTEND_DIR / 'index.html',
+                        headers={'Cache-Control': 'no-store, max-age=0'})
 
 
 # Serve any other static assets from frontend dir
