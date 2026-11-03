@@ -9,6 +9,7 @@ from typing import Optional
 DATA_FILE = Path(__file__).parent / 'data.json'
 
 samples:      list[dict] = []   # {'ts': int, 'pct': float}  — session % history
+weekly_samples: list[dict] = []  # {'ts': int, 'pct': float} — uso settimanale (8 giorni)
 account:      Optional[dict] = None
 reset_events: list[int] = []    # timestamp (Unix) dei reset sessione osservati
 _last_reset_ts: Optional[int] = None  # ultimo session_resets_at_ts visto
@@ -20,11 +21,12 @@ settings: dict = {
 
 
 def load():
-    global samples, account, settings, reset_events, _last_reset_ts
+    global samples, account, settings, reset_events, _last_reset_ts, weekly_samples
     try:
         if DATA_FILE.exists():
             d = json.loads(DATA_FILE.read_text())
             samples        = d.get('samples', [])
+            weekly_samples = d.get('weekly_samples', [])
             account        = d.get('account', None)
             reset_events   = d.get('reset_events', [])
             _last_reset_ts = d.get('last_reset_ts', None)
@@ -79,6 +81,7 @@ def save():
     try:
         DATA_FILE.write_text(json.dumps({
             'samples':        samples,
+            'weekly_samples': weekly_samples,
             'account':        account,
             'reset_events':   reset_events,
             'last_reset_ts':  _last_reset_ts,
@@ -163,6 +166,24 @@ def add_sample(session_pct_used: float) -> None:
     # Mantieni solo le ultime 24 ore
     cutoff = now_ts - 86_400
     samples = [s for s in samples if s['ts'] >= cutoff]
+
+
+def add_weekly_sample(pct: float) -> None:
+    """Campione dell'uso settimanale per il grafico a 7 giorni.
+    Un punto ogni 10 minuti al massimo (~1000 punti in 7 giorni)."""
+    global weekly_samples
+    now_ts = int(time.time())
+    p = round(pct, 1)
+    if weekly_samples and (now_ts - weekly_samples[-1]['ts']) < 600:
+        weekly_samples[-1] = {'ts': now_ts, 'pct': p}
+    else:
+        weekly_samples.append({'ts': now_ts, 'pct': p})
+    cutoff = now_ts - 8 * 86_400
+    weekly_samples = [s for s in weekly_samples if s['ts'] >= cutoff]
+
+
+def get_weekly_history() -> list[dict]:
+    return list(weekly_samples)
 
 
 def get_session_history() -> list[dict]:

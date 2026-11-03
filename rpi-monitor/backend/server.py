@@ -95,18 +95,31 @@ def process_account_limits(limits: dict):
         'weekly_pct_remaining': limits.get('weekly_pct_remaining'),
         'weekly_resets_label':  _keep('weekly_resets_label'),
         'weekly_resets_at_ts':  limits.get('weekly_resets_at_ts') or _keep('weekly_resets_at_ts'),
+        'weekly_started_ts':    _keep('weekly_started_ts'),
+        'weekly_sources':       _keep('weekly_sources'),
+        'weekly_scoped':        _keep('weekly_scoped'),
+        # Credito incluso per le sessioni cloud
+        'cloud_credit_limit_usd':     _keep('cloud_credit_limit_usd'),
+        'cloud_credit_used_usd':      _keep('cloud_credit_used_usd'),
+        'cloud_credit_remaining_usd': _keep('cloud_credit_remaining_usd'),
+        'cloud_credit_expires_ts':    _keep('cloud_credit_expires_ts'),
+        # False sui piani senza finestra 5h (es. Ultra verificato)
+        'has_session_window': bool(limits.get('has_session_window', True)),
         # Credits / billing (extra_usage)
         'credits_spent_eur':    _keep('credits_spent_eur'),
         'credits_limit_eur':    _keep('credits_limit_eur'),
         'credits_balance_eur':  _keep('credits_balance_eur'),
         # Meta
-        'plan':           limits.get('plan', 'pro'),
+        'plan':           limits.get('plan') or prev.get('plan'),
         'session_status': 'ok',
         'ts':             int(time.time() * 1000),
     }
     # Osserva eventuali shift di session_resets_at_ts per registrare i reset
     store.observe_session_reset_ts(store.account.get('session_resets_at_ts'))
     store.save()
+    wpct = store.account.get('weekly_pct_used')
+    if wpct is not None:
+        store.add_weekly_sample(wpct)
     spct = store.account.get('session_pct_used')
     remain = store.account.get('messages_remaining')
     if spct is not None:
@@ -187,6 +200,11 @@ def get_account():
 @app.get('/api/account/history')
 def get_account_history():
     return store.get_session_history()
+
+
+@app.get('/api/account/weekly-history')
+def get_weekly_history():
+    return store.get_weekly_history()
 
 
 @app.get('/api/account/resets')

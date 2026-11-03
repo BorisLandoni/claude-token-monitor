@@ -456,6 +456,11 @@ body { background: var(--bg); color: var(--text); }
 #login-qr-wrap img { width:180px; height:180px; display:block; }
 #login-qr-spinner { font-size:12px; color:var(--muted); animation:spin .7s linear infinite; }
 #login-modal-status { font-size:11px; text-align:center; line-height:1.6; }
+#weekly-extra { display:flex; flex-direction:column; gap:4px; flex:0 0 auto; }
+#weekly-extra .we-pace { font-size:11px; font-weight:600; line-height:1.3; }
+#weekly-extra .we-chips { display:flex; gap:5px; flex-wrap:wrap; }
+#weekly-extra .we-chip { font-size:10px; color:var(--muted); background:var(--surface2);
+  border:1px solid var(--border); border-radius:8px; padding:1px 7px; }
 #wifi-modal {
   position:fixed; inset:0; z-index:2000;
   background:rgba(5,13,22,.88); backdrop-filter:blur(6px);
@@ -482,6 +487,7 @@ body { background: var(--bg); color: var(--text); }
   <div class="h-left">
     <div class="pulse"></div>
     <span class="app-title">CLAUDE&nbsp;MONITOR</span>
+    <span id="plan-badge" style="display:none;font-size:10px;letter-spacing:1px;background:var(--surface2);color:var(--cyan);padding:1px 8px;border-radius:8px;margin-left:10px"></span>
   </div>
   <div class="h-right">
     <span id="date"></span>
@@ -497,7 +503,7 @@ body { background: var(--bg); color: var(--text); }
 
     <!-- ── LEFT: gauge + timeline + weekly ──────────────────────────────── -->
     <div class="now-left">
-      <div class="gauge-section-label">SESSIONE CORRENTE</div>
+      <div class="gauge-section-label" id="gauge-label">SESSIONE CORRENTE</div>
 
       <div class="gauge-wrap">
         <svg viewBox="0 0 220 185" xmlns="http://www.w3.org/2000/svg">
@@ -537,7 +543,7 @@ body { background: var(--bg); color: var(--text); }
 
       <!-- Timeline 5h -->
       <div class="timeline-section">
-        <div class="tl-label">FINESTRA SESSIONE · 5 ORE</div>
+        <div class="tl-label" id="tl-label">FINESTRA SESSIONE · 5 ORE</div>
         <div class="tl-bar">
           <div id="tl-fill" class="tl-fill" style="width:2%;background:var(--muted2)"></div>
         </div>
@@ -549,10 +555,10 @@ body { background: var(--bg); color: var(--text); }
 
       <!-- Weekly (spostato qui) -->
       <div class="weekly-compact" id="weekly-box">
-        <div class="box-title">SETTIMANALE · TUTTI I MODELLI</div>
+        <div class="box-title" id="wb-title">SETTIMANALE · TUTTI I MODELLI</div>
         <div class="weekly-pct-row">
           <span id="weekly-big" class="weekly-big">—</span>
-          <span class="weekly-unit">utilizzato</span>
+          <span class="weekly-unit" id="weekly-unit">utilizzato</span>
         </div>
         <div class="slim-bar">
           <div id="weekly-fill" class="slim-fill" style="width:0%;background:var(--green)"></div>
@@ -571,7 +577,7 @@ body { background: var(--bg); color: var(--text); }
       </div>
 
       <!-- Controlli zoom/scroll grafico -->
-      <div class="sparkline-controls">
+      <div class="sparkline-controls" id="sp-controls">
         <button class="sp-win-btn"        data-win="4"  onclick="setSparkWindow(4)">4h</button>
         <button class="sp-win-btn"        data-win="12" onclick="setSparkWindow(12)">12h</button>
         <button class="sp-win-btn active" data-win="24" onclick="setSparkWindow(24)">24h</button>
@@ -579,6 +585,9 @@ body { background: var(--bg); color: var(--text); }
                oninput="setSparkScroll(this.value)"
                title="Scorri nel tempo: sinistra = più vecchio, destra = più recente">
       </div>
+
+      <!-- Ritmo e dettaglio (solo piani senza finestra 5h) -->
+      <div id="weekly-extra" style="display:none"></div>
 
       <!-- Pulsante Aggiorna -->
       <button id="now-refresh-btn" onclick="nowRefresh()">
@@ -967,6 +976,13 @@ let sparkScrollPct = 100;  // 0 = oldest, 100 = most recent (default)
 function renderCountdown(now) {
   const el = document.getElementById('countdown');
   if (!el) return;
+  if (isWeeklyMode()) {
+    const b = weeklyBounds();
+    const secs = b ? b.end - Math.floor(now.getTime() / 1000) : 0;
+    el.innerHTML = secs > 0 ? `Reset tra <b>${fmtDur(secs)}</b> · ${fmtDayTime(b.end)}` : 'Reset imminente';
+    el.className = secs > 0 && secs < 6 * 3600 ? 'ok' : '';
+    return;
+  }
   if (!sessionResetTs) {
     // Se la sessione è al 100% mostriamo un messaggio coerente
     const pctUsed = (DATA.account || {}).session_pct_used;
@@ -1001,6 +1017,17 @@ function renderTimeline() {
   const start = document.getElementById('tl-start');
   const end   = document.getElementById('tl-end');
   if (!fill) return;
+  if (isWeeklyMode()) {
+    const b = weeklyBounds();
+    if (!b) return;
+    const nowTs = Math.floor(Date.now() / 1000);
+    const pct = Math.max(0, Math.min(100, Math.round((nowTs - b.start) / (b.end - b.start) * 100)));
+    fill.style.width = Math.max(2, pct) + '%';
+    fill.style.background = 'var(--cyan)';
+    if (start) start.textContent = fmtDayTime(b.start);
+    if (end)   end.textContent   = fmtDayTime(b.end) + ' ↺';
+    return;
+  }
   if (!sessionResetTs) {
     fill.style.width = '2%'; fill.style.background = 'var(--muted2)';
     if (start) start.textContent = 'in attesa…';
@@ -1037,6 +1064,235 @@ function renderRefreshBar() {
 /* ════════════════════════════════════════════════════════════════════════════
    SPARKLINE — area chart sessione % 24 ore
    ════════════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════════════════
+   MODALITÀ SETTIMANALE — piani senza finestra 5h (es. Ultra)
+   Si attiva quando l'API non restituisce `five_hour`: gauge, grafico e
+   riquadri passano al limite settimanale. Con la finestra 5h resta tutto
+   com'era.
+   ════════════════════════════════════════════════════════════════════════ */
+let weeklyHistory = [];
+const WEEK_SECS = 7 * 86400;
+const DAYS_IT = ['dom','lun','mar','mer','gio','ven','sab'];
+const MONTHS_IT = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+
+function isWeeklyMode() {
+  const a = DATA.account || {};
+  return a.has_session_window === false && a.weekly_pct_used != null;
+}
+
+function weeklyBounds() {
+  const a = DATA.account || {};
+  const end = a.weekly_resets_at_ts || null;
+  if (!end) return null;
+  const start = a.weekly_started_ts || (end - WEEK_SECS);
+  return { start, end };
+}
+
+function _hhmm(d) {
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function fmtDayTime(ts) {
+  const d = new Date(ts * 1000);
+  return `${DAYS_IT[d.getDay()]} ${_hhmm(d)}`;
+}
+function fmtDur(secs) {
+  secs = Math.max(0, Math.floor(secs));
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (d > 0) return `${d}g ${h}h`;
+  if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m`;
+  return `${m}m`;
+}
+
+// Ritmo: proiezione lineare dell'uso fino a fine settimana
+function weeklyPace() {
+  const a = DATA.account || {};
+  const b = weeklyBounds();
+  const w = a.weekly_pct_used;
+  if (!b || w == null) return null;
+  const now = Math.floor(Date.now() / 1000);
+  const elapsed = now - b.start;
+  const frac = elapsed / (b.end - b.start);
+  if (frac < 0.03 || w <= 0) return { ok: true, text: 'Ritmo regolare', projected: w };
+  const projected = Math.round(w / frac);
+  if (projected < 100) return { ok: true, text: `Ritmo sostenibile · fine settimana ~${projected}%`, projected };
+  const exhaustTs = now + (100 - w) / (w / elapsed);
+  return { ok: false, text: `A questo ritmo finisci ${fmtDayTime(exhaustTs)}, prima del reset`, projected };
+}
+
+function renderWeeklyMode(acc) {
+  const w = acc.weekly_pct_used;
+  const colorVar = w < 50 ? '--green' : w < 75 ? '--amber' : '--red';
+  setGauge(w, colorVar);
+  setText('gauge-label', 'SETTIMANA · TUTTI I MODELLI');
+  setText('tl-label', 'TEMPO TRASCORSO · SETTIMANA');
+  setText('sp-label', 'UTILIZZO SETTIMANA · 7 GIORNI');
+
+  // Credito sessioni cloud al posto del riquadro settimanale
+  setText('wb-title', 'CREDITO SESSIONI CLOUD');
+  const cl = acc.cloud_credit_limit_usd;
+  if (cl != null) {
+    const rem = acc.cloud_credit_remaining_usd;
+    const pctLeft = cl > 0 ? Math.max(0, Math.min(100, Math.round(rem / cl * 100))) : 0;
+    setText('weekly-big', Math.round(rem) + ' $');
+    setText('weekly-unit', `su ${Math.round(cl)} $ rimasti`);
+    setStyle('weekly-big', 'color', 'var(--cyan)');
+    setStyle('weekly-fill', 'width', pctLeft + '%');
+    setStyle('weekly-fill', 'background', 'var(--cyan)');
+    setText('weekly-meta', acc.cloud_credit_expires_ts
+      ? `Scade ${fmtDayTime(acc.cloud_credit_expires_ts)} · ${fmtDur(acc.cloud_credit_expires_ts - Date.now()/1000)}`
+      : 'Credito incluso nel piano');
+  } else {
+    setText('weekly-big', '—');
+    setText('weekly-unit', '');
+    setStyle('weekly-fill', 'width', '0%');
+    setText('weekly-meta', 'Nessun credito cloud');
+  }
+
+  // Pace + fonti al posto dei controlli 4h/12h/24h
+  const ex = document.getElementById('weekly-extra');
+  if (ex) {
+    ex.textContent = '';
+    const pace = weeklyPace();
+    if (pace) {
+      const line = document.createElement('div');
+      line.className = 'we-pace';
+      line.style.color = pace.ok ? 'var(--green)' : 'var(--amber)';
+      line.textContent = (pace.ok ? '✓ ' : '⚠ ') + pace.text;
+      ex.appendChild(line);
+    }
+    const chips = [];
+    (acc.weekly_scoped || []).forEach(s => chips.push({ n: s.name, p: s.percent }));
+    (acc.weekly_sources || []).slice().sort((a, b) => (b.percent || 0) - (a.percent || 0))
+      .forEach(s => chips.push({ n: s.name, p: s.percent }));
+    if (chips.length) {
+      const row = document.createElement('div');
+      row.className = 'we-chips';
+      chips.slice(0, 4).forEach(c => {
+        const el = document.createElement('span');
+        el.className = 'we-chip';
+        el.textContent = `${c.n} ${c.p != null ? c.p + '%' : '—'}`;
+        row.appendChild(el);
+      });
+      ex.appendChild(row);
+    }
+  }
+}
+
+function drawWeeklyChart() {
+  const canvas = document.getElementById('sparkline');
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  let W = Math.round(parent.getBoundingClientRect().width) || 400;
+  let H = Math.round(canvas.getBoundingClientRect().height);
+  if (H < 80) H = 160;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const st = getComputedStyle(document.documentElement);
+  const cMuted = st.getPropertyValue('--muted').trim();
+  const cBorder = st.getPropertyValue('--border').trim();
+  const cSurf2 = st.getPropertyValue('--surface2').trim();
+  const cCyan = st.getPropertyValue('--cyan').trim();
+
+  ctx.fillStyle = cSurf2 + '40';
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') ctx.roundRect(0, 0, W, H, 6); else ctx.rect(0, 0, W, H);
+  ctx.fill();
+
+  const PAD_TOP = 10, PAD_BOT = 18, PAD_L = 30;
+  const chartH = H - PAD_TOP - PAD_BOT;
+  const chartW = W - PAD_L - 6;
+  const b = weeklyBounds();
+  const nowTs = Math.floor(Date.now() / 1000);
+  const start = b ? b.start : nowTs - 3 * 86400;
+  const end = b ? b.end : nowTs + 4 * 86400;
+  const xOf = ts => PAD_L + ((ts - start) / (end - start)) * chartW;
+  const yOf = p => PAD_TOP + (1 - p / 100) * chartH;
+
+  // Linee orizzontali %
+  [25, 50, 75].forEach(v => {
+    const y = Math.round(yOf(v)) + 0.5;
+    ctx.strokeStyle = cBorder; ctx.lineWidth = 0.5; ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(W - 6, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = cMuted; ctx.font = '9px system-ui';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(v + '%', 3, y);
+  });
+
+  // Mezzanotti con giorno della settimana
+  const d0 = new Date(start * 1000);
+  d0.setHours(24, 0, 0, 0);
+  for (let t = d0.getTime(); t < end * 1000; t += 86_400_000) {
+    const d = new Date(t);
+    const x = Math.round(xOf(t / 1000)) + 0.5;
+    ctx.strokeStyle = cBorder; ctx.lineWidth = 1; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(x, PAD_TOP); ctx.lineTo(x, H - PAD_BOT); ctx.stroke();
+    ctx.fillStyle = cMuted; ctx.font = 'bold 9px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(DAYS_IT[d.getDay()], Math.min(W - 12, x + (xOf((t + 43_200_000) / 1000) - x)), H - 2);
+  }
+
+  // Baseline
+  ctx.strokeStyle = cBorder; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD_L, H - PAD_BOT); ctx.lineTo(W - 6, H - PAD_BOT); ctx.stroke();
+
+  // Ritmo ideale (uso lineare fino al reset)
+  ctx.strokeStyle = cMuted + '99'; ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(xOf(start), yOf(0)); ctx.lineTo(xOf(end), yOf(100)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ora corrente
+  if (nowTs >= start && nowTs <= end) {
+    const xn = Math.round(xOf(nowTs)) + 0.5;
+    ctx.strokeStyle = cCyan; ctx.lineWidth = 1.2; ctx.setLineDash([3, 2]);
+    ctx.beginPath(); ctx.moveTo(xn, PAD_TOP); ctx.lineTo(xn, H - PAD_BOT); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Reset
+  const cGreen = st.getPropertyValue('--green').trim();
+  ctx.fillStyle = cGreen; ctx.font = 'bold 11px system-ui';
+  ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+  ctx.fillText('↺', W - 8, PAD_TOP - 1);
+
+  // Dati
+  let pts = weeklyHistory.filter(p => p.ts >= start && p.ts <= end);
+  const cur = (DATA.account || {}).weekly_pct_used;
+  if (!pts.length && cur != null) pts = [{ ts: nowTs, pct: cur }];
+  if (!pts.length) return;
+  const last = pts[pts.length - 1];
+  const cLine = st.getPropertyValue(last.pct < 50 ? '--cyan' : last.pct < 75 ? '--amber' : '--red').trim();
+
+  if (pts.length > 1) {
+    const grad = ctx.createLinearGradient(0, PAD_TOP, 0, H - PAD_BOT);
+    grad.addColorStop(0, hexToRgba(cLine, 0.35));
+    grad.addColorStop(1, hexToRgba(cLine, 0.03));
+    ctx.beginPath();
+    ctx.moveTo(xOf(pts[0].ts), H - PAD_BOT);
+    pts.forEach(p => ctx.lineTo(xOf(p.ts), yOf(p.pct)));
+    ctx.lineTo(xOf(last.ts), H - PAD_BOT);
+    ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+    ctx.beginPath();
+    pts.forEach((p, i) => { const x = xOf(p.ts), y = yOf(p.pct); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.strokeStyle = cLine; ctx.lineWidth = 2; ctx.stroke();
+  }
+  const lx = xOf(last.ts), ly = yOf(last.pct);
+  ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fillStyle = cLine; ctx.fill();
+  ctx.font = 'bold 11px system-ui'; ctx.textAlign = lx > W - 50 ? 'right' : 'left';
+  ctx.textBaseline = ly < PAD_TOP + 16 ? 'top' : 'bottom';
+  ctx.fillText(Math.round(last.pct) + '%', lx + (lx > W - 50 ? -7 : 7), ly + (ly < PAD_TOP + 16 ? 4 : -4));
+
+  if (pts.length < 3) {
+    const f = new Date(pts[0].ts * 1000);
+    ctx.fillStyle = cMuted; ctx.font = '9px system-ui'; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText(`Storico registrato dal ${f.getDate()} ${MONTHS_IT[f.getMonth()]} ${_hhmm(f)}`, PAD_L + 4, H - PAD_BOT - 3);
+  }
+}
+
 function _downsample(pts, maxPts) {
   if (pts.length <= maxPts) return pts;
   const bucket = Math.ceil(pts.length / maxPts);
@@ -1052,6 +1308,7 @@ function _downsample(pts, maxPts) {
 function drawSparkline() {
   const canvas = document.getElementById('sparkline');
   if (!canvas) return;
+  if (isWeeklyMode()) { drawWeeklyChart(); return; }
 
   // Larghezza dal parent, altezza dal canvas stesso (assegnata dal flexbox)
   const parent = canvas.parentElement;
@@ -1360,17 +1617,19 @@ function closeInfoOutside(e) {
 async function loadData() {
   let okFetch = false;
   try {
-    const [account, settings, session, history, resets] = await Promise.all([
+    const [account, settings, session, history, resets, wHistory] = await Promise.all([
       fetch('/api/account').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
       fetch('/api/session').then(r => r.json()),
       fetch('/api/account/history').then(r => r.json()).catch(() => []),
       fetch('/api/account/resets').then(r => r.json()).catch(() => []),
+      fetch('/api/account/weekly-history').then(r => r.json()).catch(() => []),
     ]);
     okFetch = true;
     DATA = { account, settings, session };
     sessionHistory = Array.isArray(history) ? history : [];
     resetEvents    = Array.isArray(resets)  ? resets  : [];
+    weeklyHistory  = Array.isArray(wHistory) ? wHistory : [];
     // Preserva l'ultimo timestamp conosciuto: a sessione 100% l'API spesso non lo restituisce
     const newResetTs = account.session_resets_at_ts || account.reset_at_ts;
     if (newResetTs) {
@@ -1432,6 +1691,27 @@ function render() {
    ════════════════════════════════════════════════════════════════════════ */
 function renderNow() {
   const acc = DATA.account || {};
+  const weekly = isWeeklyMode();
+  const ctl = document.getElementById('sp-controls');
+  const ext = document.getElementById('weekly-extra');
+  if (ctl) ctl.style.display = weekly ? 'none' : '';
+  if (ext) ext.style.display = weekly ? '' : 'none';
+  const badge = document.getElementById('plan-badge');
+  if (badge) { badge.textContent = acc.plan || ''; badge.style.display = acc.plan ? '' : 'none'; }
+  if (weekly) {
+    renderWeeklyMode(acc);
+  } else {
+    setText('gauge-label', 'SESSIONE CORRENTE');
+    setText('tl-label', 'FINESTRA SESSIONE · 5 ORE');
+    setText('wb-title', 'SETTIMANALE · TUTTI I MODELLI');
+    setText('weekly-unit', 'utilizzato');
+    setText('sp-label', `UTILIZZO SESSIONE · ${sparkWindowH === 24 ? '24 ORE' : sparkWindowH + ' ORE'}`);
+    renderNowSession(acc);
+  }
+  renderFooterStatus(acc);
+}
+
+function renderNowSession(acc) {
 
   // Gauge sessione
   let pctUsed = null;
@@ -1478,6 +1758,9 @@ function renderNow() {
     setText('weekly-meta', 'Accedi per vedere i limiti settimanali');
   }
 
+}
+
+function renderFooterStatus(acc) {
   // Footer status
   const s  = DATA.session || {};
   const st = document.getElementById('session-status');

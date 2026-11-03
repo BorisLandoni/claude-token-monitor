@@ -56,6 +56,8 @@ class ClaudeClient:
     _oauth_retry_after: float = 0      # timestamp fino a quando NON chiamare (dopo 429)
     _oauth_refresh_retry_after: float = 0  # backoff sull'endpoint di refresh (dopo 429)
     last_raw_oauth: Optional[dict] = None  # ultima risposta OAuth grezza (per debug)
+    _plan_label: Optional[str] = None      # es. 'Ultra' (da /api/oauth/profile)
+    _plan_checked: float = 0
     last_error: Optional[str] = None       # ultimo errore di poll (visibile in /api/debug/oauth)
 
     # ── OAuth (Claude Code credentials) ───────────────────────────────────────
@@ -300,23 +302,18 @@ class ClaudeClient:
             data = resp.json()
             ClaudeClient.last_raw_oauth = data  # salva per debug endpoint
             print(f'[oauth] raw response: {json.dumps(data)[:600]}')
-            out: dict = {'plan': 'pro'}
+            out: dict = {}
+            await self._ensure_plan()
+            if self._plan_label:
+                out['plan'] = self._plan_label
 
             def _to_pct(v) -> int:
-                """Converte utilization API → intero 0-100.
-                L'endpoint Anthropic restituisce frazioni 0-1 (es. 0.62 = 62%)."""
-                f = float(v)
-                if f <= 1.0:
-                    f *= 100
-                return min(100, max(0, round(f)))
+                """Converte utilization API → intero 0-100 (l'API restituisce già percentuali)."""
+                return min(100, max(0, round(float(v))))
 
-            # Sessione 5h
+            # Sessione 5h — assente (null) sui piani senza finestra (es. Ultra verificato)
             fh = data.get('five_hour') or {}
-            if not fh:
-                # five_hour null = nessuna finestra 5h attiva (nessun messaggio
-                # nelle ultime 5 ore): sessione a 0%, non "dati mancanti".
-                out['session_pct_used']      = 0
-                out['session_pct_remaining'] = 100
+            out['has_session_window'] = bool(fh)
             if fh.get('utilization') is not None:
                 spct = _to_pct(fh['utilization'])
                 out['session_pct_used']      = spct
@@ -335,6 +332,7 @@ class ClaudeClient:
             if sd.get('resets_at'):
                 ts = self._iso_to_ts(sd['resets_at'])
                 if ts is not None:
+                    ts = int(round(ts / 60.0) * 60)   # l'API dà 15:59:59.8 → 16:00
                     out['weekly_resets_at_ts'] = ts
                     try:
                         import datetime as _dt
@@ -343,6 +341,47 @@ class ClaudeClient:
                         out['weekly_resets_label'] = f"{days_it[d.weekday()]} {d.strftime('%H:%M')}"
                     except Exception:
                         pass
+
+            # Dettaglio settimana: inizio finestra, uso per fonte
+            bd = data.get('seven_day_breakdown') or {}
+            wstart = self._iso_to_ts(bd.get('window_started_at')) if bd.get('window_started_at') else None
+            if wstart is not None:
+                out['weekly_started_ts'] = int(round(wstart / 60.0) * 60)
+            rows = [{'name': r.get('display_name') or r.get('key'), 'percent': r.get('percent')}
+                    for r in (bd.get('rows') or []) if isinstance(r, dict)]
+            if rows:
+                out['weekly_sources'] = rows
+
+            # Limiti settimanali per modello (es. Fable)
+            scoped = []
+            for lim in data.get('limits') or []:
+                if not isinstance(lim, dict) or lim.get('kind') != 'weekly_scoped':
+                    continue
+                model = ((lim.get('scope') or {}).get('model') or {}).get('display_name')
+                if model:
+                    scoped.append({'name': model, 'percent': lim.get('percent'),
+                                   'active': bool(lim.get('is_active'))})
+            if scoped:
+                out['weekly_scoped'] = scoped
+
+            # Credito incluso per le sessioni cloud: nell'API ha un nome in codice
+            # (oggi "iguana_necktie"), quindi lo si riconosce dalla forma: oggetto con
+            # limit_dollars e used_dollars valorizzati (il settimanale li ha null).
+            for key, val in data.items():
+                if (isinstance(val, dict) and key != 'seven_day'
+                        and val.get('limit_dollars') is not None
+                        and val.get('used_dollars') is not None):
+                    lim_d  = float(val['limit_dollars'])
+                    used_d = float(val['used_dollars'])
+                    out['cloud_credit_limit_usd']     = round(lim_d, 2)
+                    out['cloud_credit_used_usd']      = round(used_d, 2)
+                    out['cloud_credit_remaining_usd'] = round(
+                        float(val['remaining_dollars']) if val.get('remaining_dollars') is not None
+                        else lim_d - used_d, 2)
+                    exp = self._iso_to_ts(val['resets_at']) if val.get('resets_at') else None
+                    if exp is not None:
+                        out['cloud_credit_expires_ts'] = exp
+                    break
 
             # Crediti (extra_usage, in centesimi EUR)
             eu = data.get('extra_usage') or {}
@@ -360,6 +399,19 @@ class ClaudeClient:
             print(f'[oauth] errore: {e}')
             ClaudeClient.last_error = f'errore: {e}'
             return None
+
+    async def _ensure_plan(self) -> None:
+        """Legge il piano dal profilo account (al massimo ogni 6 ore)."""
+        if time.time() < self._plan_checked + 6 * 3600 and self._plan_label:
+            return
+        if time.time() < self._plan_checked + 300:   # non martellare se fallisce
+            return
+        self._plan_checked = time.time()
+        prof = await self.fetch_profile()
+        org = (prof or {}).get('organization') or {}
+        label = org.get('plan_display_name') or None
+        if label:
+            ClaudeClient._plan_label = label
 
     async def fetch_profile(self) -> Optional[dict]:
         """Profilo account (piano, tier) da /api/oauth/profile. None se non disponibile."""
