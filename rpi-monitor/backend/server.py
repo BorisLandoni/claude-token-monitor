@@ -211,6 +211,8 @@ def debug_oauth_raw():
     """Ultima risposta grezza dall'endpoint /api/oauth/usage di Anthropic."""
     return {
         'has_data': client.last_raw_oauth is not None,
+        'last_error': client.last_error,
+        'next_poll_in': client.seconds_until_next_poll(),
         'raw':      client.last_raw_oauth,
         'mapped':   store.account,
     }

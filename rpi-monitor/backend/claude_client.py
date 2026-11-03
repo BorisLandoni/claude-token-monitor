@@ -37,6 +37,8 @@ OAUTH_SCOPES           = ('org:create_api_key user:profile user:inference '
 # client_id pubblico di Claude Code (lo stesso usato dal CLI)
 OAUTH_CLIENT_ID        = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
 OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
+# L'endpoint usage tende a rispondere 429 ai client senza UA del CLI
+OAUTH_USER_AGENT       = 'claude-code/2.1.0'
 OAUTH_MIN_INTERVAL     = 30    # secondi minimi tra due chiamate OAuth
 OAUTH_BACKOFF_429      = 180   # secondi di attesa dopo un 429
 
@@ -53,6 +55,7 @@ class ClaudeClient:
     _oauth_retry_after: float = 0      # timestamp fino a quando NON chiamare (dopo 429)
     _oauth_refresh_retry_after: float = 0  # backoff sull'endpoint di refresh (dopo 429)
     last_raw_oauth: Optional[dict] = None  # ultima risposta OAuth grezza (per debug)
+    last_error: Optional[str] = None       # ultimo errore di poll (visibile in /api/debug/oauth)
 
     # ── OAuth (Claude Code credentials) ───────────────────────────────────────
 
@@ -254,6 +257,7 @@ class ClaudeClient:
                     headers={
                         'Authorization': f'Bearer {token}',
                         'anthropic-beta': OAUTH_BETA_HEADER,
+                        'User-Agent': OAUTH_USER_AGENT,
                     },
                 )
             # Token scaduto → prova il refresh automatico una volta sola
@@ -267,6 +271,8 @@ class ClaudeClient:
                             headers={
                                 'Authorization': f'Bearer {token}',
                                 'anthropic-beta': OAUTH_BETA_HEADER,
+                                'User-Agent': OAUTH_USER_AGENT,
+                        'User-Agent': OAUTH_USER_AGENT,
                             },
                         )
                 else:
@@ -277,13 +283,16 @@ class ClaudeClient:
                 return {'_error': 'oauth_expired'}
             if resp.status_code == 429:
                 self._oauth_retry_after = time.time() + OAUTH_BACKOFF_429
+                ClaudeClient.last_error = f'429 rate limit: {resp.text[:200]}'
                 print(f'[oauth] 429 rate limit — pausa {OAUTH_BACKOFF_429}s')
                 return None
             if resp.status_code != 200:
                 print(f'[oauth] HTTP {resp.status_code}: {resp.text[:200]}')
+                ClaudeClient.last_error = f'HTTP {resp.status_code}: {resp.text[:200]}'
                 return None
 
             self._oauth_last_call = time.time()
+            ClaudeClient.last_error = None
 
             data = resp.json()
             ClaudeClient.last_raw_oauth = data  # salva per debug endpoint
@@ -341,6 +350,7 @@ class ClaudeClient:
 
         except Exception as e:
             print(f'[oauth] errore: {e}')
+            ClaudeClient.last_error = f'errore: {e}'
             return None
 
     def seconds_until_next_poll(self) -> int:
