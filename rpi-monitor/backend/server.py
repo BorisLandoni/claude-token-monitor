@@ -208,6 +208,12 @@ def rescan_resets():
     }
 
 
+@app.get('/api/debug/profile')
+async def debug_profile():
+    """Risposta grezza di /api/oauth/profile (per capire il piano dell'account)."""
+    return await client.fetch_profile()
+
+
 @app.get('/api/debug/oauth')
 def debug_oauth_raw():
     """Ultima risposta grezza dall'endpoint /api/oauth/usage di Anthropic."""

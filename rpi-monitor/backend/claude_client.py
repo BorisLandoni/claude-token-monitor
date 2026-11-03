@@ -39,6 +39,7 @@ OAUTH_CLIENT_ID        = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
 OAUTH_BETA_HEADER      = 'oauth-2025-04-20'
 # L'endpoint usage tende a rispondere 429 ai client senza UA del CLI
 OAUTH_USER_AGENT       = 'claude-code/2.1.0'
+OAUTH_PROFILE_URL      = 'https://api.anthropic.com/api/oauth/profile'
 OAUTH_MIN_INTERVAL     = 30    # secondi minimi tra due chiamate OAuth
 OAUTH_BACKOFF_429      = 180   # secondi di attesa dopo un 429
 
@@ -273,7 +274,6 @@ class ClaudeClient:
                                 'Authorization': f'Bearer {token}',
                                 'anthropic-beta': OAUTH_BETA_HEADER,
                                 'User-Agent': OAUTH_USER_AGENT,
-                        'User-Agent': OAUTH_USER_AGENT,
                             },
                         )
                 else:
@@ -360,6 +360,27 @@ class ClaudeClient:
             print(f'[oauth] errore: {e}')
             ClaudeClient.last_error = f'errore: {e}'
             return None
+
+    async def fetch_profile(self) -> Optional[dict]:
+        """Profilo account (piano, tier) da /api/oauth/profile. None se non disponibile."""
+        token = self.get_oauth_token()
+        if not token:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as cli:
+                resp = await cli.get(
+                    OAUTH_PROFILE_URL,
+                    headers={
+                        'Authorization': f'Bearer {token}',
+                        'anthropic-beta': OAUTH_BETA_HEADER,
+                        'User-Agent': OAUTH_USER_AGENT,
+                    },
+                )
+            if resp.status_code != 200:
+                return {'_error': f'HTTP {resp.status_code}: {resp.text[:200]}'}
+            return resp.json()
+        except Exception as e:
+            return {'_error': str(e)}
 
     def seconds_until_next_poll(self) -> int:
         """Secondi rimanenti prima che sia consentita un'altra chiamata OAuth."""
