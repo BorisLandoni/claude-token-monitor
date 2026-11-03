@@ -1024,6 +1024,7 @@ function renderTimeline() {
     const pct = Math.max(0, Math.min(100, Math.round((nowTs - b.start) / (b.end - b.start) * 100)));
     fill.style.width = Math.max(2, pct) + '%';
     fill.style.background = 'var(--cyan)';
+    setText('tl-label', `TEMPO TRASCORSO · ${pct}%`);
     if (start) start.textContent = fmtDayTime(b.start);
     if (end)   end.textContent   = fmtDayTime(b.end) + ' ↺';
     return;
@@ -1126,7 +1127,6 @@ function renderWeeklyMode(acc) {
   const colorVar = w < 50 ? '--green' : w < 75 ? '--amber' : '--red';
   setGauge(w, colorVar);
   setText('gauge-label', 'SETTIMANA · TUTTI I MODELLI');
-  setText('tl-label', 'TEMPO TRASCORSO · SETTIMANA');
   setText('sp-label', 'UTILIZZO SETTIMANA · 7 GIORNI');
 
   // Credito sessioni cloud al posto del riquadro settimanale
