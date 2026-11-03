@@ -673,6 +673,38 @@ async def kiosk_localcheck():
     return out
 
 
+@app.post('/api/kiosk/refresh')
+def kiosk_refresh():
+    """Ricarica il display da zero: ferma Chromium, cancella cache e sessione
+    ripristinata, poi lo script start-kiosk.sh (in loop) lo rilancia dopo 3s.
+    Serve perché Chromium ripristina la scheda precedente dalla cache senza
+    chiedere al server la pagina aggiornata."""
+    import shutil
+    removed = []
+    try:
+        subprocess.run(['pkill', '-f', 'chromium'], timeout=5)
+    except Exception as e:
+        print(f'[kiosk] pkill chromium: {e}')
+    time.sleep(1)
+    home = Path.home()
+    targets = [home / '.cache' / 'chromium']
+    prof = home / '.config' / 'chromium' / 'Default'
+    targets += [prof / 'Sessions', prof / 'Service Worker', prof / 'Code Cache',
+                prof / 'Current Session', prof / 'Current Tabs',
+                prof / 'Last Session', prof / 'Last Tabs']
+    for t in targets:
+        try:
+            if t.is_dir():
+                shutil.rmtree(t, ignore_errors=True)
+                removed.append(str(t))
+            elif t.exists():
+                t.unlink()
+                removed.append(str(t))
+        except Exception as e:
+            print(f'[kiosk] rimozione {t}: {e}')
+    return {'ok': True, 'removed': removed}
+
+
 @app.get('/api/kiosk/requests')
 def kiosk_requests():
     """Ultime richieste arrivate da localhost (il browser del display)."""
