@@ -627,6 +627,31 @@ def kiosk_diag():
     }
 
 
+@app.get('/api/kiosk/localcheck')
+async def kiosk_localcheck():
+    """Cosa vede il Pi sul proprio localhost (quello che apre il browser del display),
+    porte in ascolto, ora di sistema e sincronizzazione NTP."""
+    out: dict = {}
+    async with httpx.AsyncClient(timeout=4.0) as c:
+        for name, url in (('localhost', 'http://localhost:8080/api/version'),
+                          ('ipv4', 'http://127.0.0.1:8080/api/version'),
+                          ('ipv6', 'http://[::1]:8080/api/version')):
+            try:
+                r = await c.get(url)
+                out[name] = r.json() if r.status_code == 200 else f'HTTP {r.status_code}'
+            except Exception as e:
+                out[name] = f'errore: {type(e).__name__}'
+    def _run(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout.strip()
+        except Exception as e:
+            return f'errore: {e}'
+    out['listen_8080'] = _run(['bash', '-c', "ss -ltnp 2>/dev/null | grep ':8080'"])
+    out['timedatectl'] = _run(['timedatectl'])
+    out['uptime'] = _run(['uptime', '-s'])
+    return out
+
+
 @app.post('/api/kiosk/start')
 def kiosk_start():
     """Rilancia il kiosk se è stato chiuso."""
