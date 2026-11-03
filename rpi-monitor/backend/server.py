@@ -187,6 +187,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title='Claude Monitor', lifespan=lifespan)
 
+# Ultime richieste dal Pi stesso (= browser del display), per capire cosa carica il kiosk
+_local_requests: list = []
+
+
+@app.middleware('http')
+async def _track_local_requests(request, call_next):
+    resp = await call_next(request)
+    try:
+        host = request.client.host if request.client else ''
+        if host in ('127.0.0.1', '::1') and not request.url.path.startswith('/api/kiosk/localcheck'):
+            _local_requests.append({
+                'time': time.strftime('%H:%M:%S'),
+                'path': request.url.path,
+                'status': resp.status_code,
+                'ua': (request.headers.get('user-agent') or '')[:80],
+            })
+            del _local_requests[:-60]
+    except Exception:
+        pass
+    return resp
+
 
 # ── Account endpoints ──────────────────────────────────────────────────────────
 
@@ -650,6 +671,12 @@ async def kiosk_localcheck():
     out['timedatectl'] = _run(['timedatectl'])
     out['uptime'] = _run(['uptime', '-s'])
     return out
+
+
+@app.get('/api/kiosk/requests')
+def kiosk_requests():
+    """Ultime richieste arrivate da localhost (il browser del display)."""
+    return list(_local_requests)
 
 
 @app.post('/api/kiosk/start')
