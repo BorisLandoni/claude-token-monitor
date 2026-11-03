@@ -249,6 +249,7 @@ class ClaudeClient:
 
         token = self.get_oauth_token()
         if not token:
+            ClaudeClient.last_error = 'accessToken assente in .credentials.json'
             return None
         try:
             async with httpx.AsyncClient(timeout=15.0) as cli:
@@ -277,9 +278,11 @@ class ClaudeClient:
                         )
                 else:
                     print('[oauth] refresh fallito — necessario "claude auth login" manuale')
+                    ClaudeClient.last_error = '401 + refresh fallito: serve nuovo login'
                     return {'_error': 'oauth_expired'}
             if resp.status_code == 401:
                 # Anche dopo refresh 401 → veramente scaduto
+                ClaudeClient.last_error = '401 anche dopo refresh'
                 return {'_error': 'oauth_expired'}
             if resp.status_code == 429:
                 self._oauth_retry_after = time.time() + OAUTH_BACKOFF_429

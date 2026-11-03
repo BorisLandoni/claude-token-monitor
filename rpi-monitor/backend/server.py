@@ -148,6 +148,8 @@ async def do_poll() -> dict:
         if store.account:
             store.account['session_status'] = 'oauth_expired'
             store.save()
+        else:
+            store.account = {'session_status': 'oauth_expired', 'ts': int(time.time() * 1000)}
         return {'refreshed': False, 'next_poll_in': 0}
 
     if oauth_data:
