@@ -1071,6 +1071,18 @@ function renderRefreshBar() {
    riquadri passano al limite settimanale. Con la finestra 5h resta tutto
    com'era.
    ════════════════════════════════════════════════════════════════════════ */
+// Se il backend viene aggiornato (anche via API/OTA), il display si ricarica da solo
+let loadedVersion = null;
+async function checkVersionReload() {
+  try {
+    const v = await fetch('/api/version', { cache: 'no-store' }).then(r => r.json());
+    const cur = v && v.version ? v.version + '@' + (v.commit || '') : null;
+    if (!cur) return;
+    if (loadedVersion === null) { loadedVersion = cur; return; }
+    if (cur !== loadedVersion) location.reload();
+  } catch (e) { /* backend in riavvio: riprova al prossimo ciclo */ }
+}
+
 let weeklyHistory = [];
 const WEEK_SECS = 7 * 86400;
 const DAYS_IT = ['dom','lun','mar','mer','gio','ven','sab'];
@@ -1653,6 +1665,7 @@ async function loadData() {
   try { render(); } catch(e){ console.error('render', e); }
   try { drawSparkline(); } catch(e){ console.error('drawSparkline', e); }
   try { renderRefreshBar(); } catch(e){ console.error('renderRefreshBar', e); }
+  checkVersionReload();
   return okFetch;
 }
 
