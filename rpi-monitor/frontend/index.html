@@ -474,7 +474,7 @@ body { background: var(--bg); color: var(--text); }
             border:1px solid var(--border); border-radius:8px; padding:5px 9px; }
 #wk-delta-main { font-size:13px; font-weight:700; }
 #wk-delta-sub  { font-size:10px; color:var(--muted); }
-#wk-pace { font-size:11px; font-weight:600; line-height:1.3; }
+#wk-pace { font-size:15px; font-weight:700; line-height:1.35; }
 #weekly-extra { display:flex; flex-direction:column; gap:4px; flex:0 0 auto; }
 #weekly-extra .we-pace { font-size:11px; font-weight:600; line-height:1.3; }
 #weekly-extra .we-chips { display:flex; gap:5px; flex-wrap:wrap; }
@@ -1163,11 +1163,15 @@ function weeklyPace() {
   const now = Math.floor(Date.now() / 1000);
   const elapsed = now - b.start;
   const frac = elapsed / (b.end - b.start);
-  if (frac < 0.03 || w <= 0) return { ok: true, text: 'Ritmo regolare', projected: w };
+  const resetTxt = `reset ${fmtDayTime(b.end)}`;
+  if (frac < 0.03 || w <= 0) return { ok: true, text: `Ritmo regolare · ${resetTxt}`, projected: w };
   const projected = Math.round(w / frac);
-  if (projected < 100) return { ok: true, text: `Ritmo sostenibile · fine settimana ~${projected}%`, projected };
   const exhaustTs = now + (100 - w) / (w / elapsed);
-  return { ok: false, text: `A questo ritmo finisci ${fmtDayTime(exhaustTs)}, prima del reset`, projected };
+  // Esaurimento solo se cade davvero prima del reset (evita il caso ~100% per arrotondamento)
+  if (exhaustTs >= b.end) {
+    return { ok: true, text: `Ritmo sostenibile: a fine settimana sarai al ~${projected}%. Reset ${fmtDayTime(b.end)}`, projected };
+  }
+  return { ok: false, text: `A questo ritmo finisci ${fmtDayTime(exhaustTs)}, ${fmtDur(b.end - exhaustTs)} prima del reset di ${fmtDayTime(b.end)}`, projected };
 }
 
 // Confronto usato / tempo trascorso (aggiornato ogni secondo dal tick)
