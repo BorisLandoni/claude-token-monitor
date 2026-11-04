@@ -456,6 +456,25 @@ body { background: var(--bg); color: var(--text); }
 #login-qr-wrap img { width:180px; height:180px; display:block; }
 #login-qr-spinner { font-size:12px; color:var(--muted); animation:spin .7s linear infinite; }
 #login-modal-status { font-size:11px; text-align:center; line-height:1.6; }
+#wk-compare { width:100%; margin-top:4px; display:flex; flex-direction:column; gap:7px; }
+.wk-nums { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.wk-cap  { font-size:10px; font-weight:700; letter-spacing:1.5px; }
+.wk-num  { font-size:48px; font-weight:800; line-height:1.05; font-variant-numeric:tabular-nums; }
+.wk-sub  { font-size:10px; color:var(--muted); margin-top:1px; }
+.wk-bars { position:relative; display:flex; flex-direction:column; gap:5px; }
+.wk-row  { display:flex; align-items:center; gap:6px; }
+.wk-lbl  { font-size:10px; width:34px; flex:0 0 auto; }
+.wk-track { flex:1; height:12px; background:var(--surface2); border:1px solid var(--border);
+            border-radius:6px; overflow:hidden; }
+.wk-fill { height:100%; border-radius:6px; min-width:3px;
+           transition:width .9s ease, background .4s ease; }
+#wk-marker { position:absolute; top:-2px; bottom:-2px; width:0;
+             border-left:1px dashed var(--amber); }
+#wk-delta { display:flex; justify-content:space-between; align-items:center;
+            border:1px solid var(--border); border-radius:8px; padding:5px 9px; }
+#wk-delta-main { font-size:13px; font-weight:700; }
+#wk-delta-sub  { font-size:10px; color:var(--muted); }
+#wk-pace { font-size:11px; font-weight:600; line-height:1.3; }
 #weekly-extra { display:flex; flex-direction:column; gap:4px; flex:0 0 auto; }
 #weekly-extra .we-pace { font-size:11px; font-weight:600; line-height:1.3; }
 #weekly-extra .we-chips { display:flex; gap:5px; flex-wrap:wrap; }
@@ -540,6 +559,31 @@ body { background: var(--bg); color: var(--text); }
       </div>
 
       <div id="countdown">—</div>
+
+      <!-- Confronto usato / tempo trascorso (solo piani senza finestra 5h) -->
+      <div id="wk-compare" style="display:none">
+        <div class="wk-nums">
+          <div>
+            <div class="wk-cap" style="color:var(--green)">USATO</div>
+            <div class="wk-num" id="wk-used-num">—</div>
+            <div class="wk-sub" id="wk-used-sub"></div>
+          </div>
+          <div>
+            <div class="wk-cap" style="color:var(--cyan)">TEMPO TRASCORSO</div>
+            <div class="wk-num" id="wk-time-num" style="color:var(--cyan)">—</div>
+            <div class="wk-sub" id="wk-time-sub"></div>
+          </div>
+        </div>
+        <div class="wk-bars">
+          <div class="wk-row"><span class="wk-lbl" style="color:var(--green)">usato</span>
+            <div class="wk-track"><div id="wk-bar-used" class="wk-fill"></div></div></div>
+          <div class="wk-row"><span class="wk-lbl" style="color:var(--cyan)">tempo</span>
+            <div class="wk-track"><div id="wk-bar-time" class="wk-fill" style="background:var(--cyan)"></div></div></div>
+          <div id="wk-marker"></div>
+        </div>
+        <div id="wk-delta"><span id="wk-delta-main"></span><span id="wk-delta-sub"></span></div>
+        <div id="wk-pace"></div>
+      </div>
 
       <!-- Timeline 5h -->
       <div class="timeline-section">
@@ -1018,15 +1062,7 @@ function renderTimeline() {
   const end   = document.getElementById('tl-end');
   if (!fill) return;
   if (isWeeklyMode()) {
-    const b = weeklyBounds();
-    if (!b) return;
-    const nowTs = Math.floor(Date.now() / 1000);
-    const pct = Math.max(0, Math.min(100, Math.round((nowTs - b.start) / (b.end - b.start) * 100)));
-    fill.style.width = Math.max(2, pct) + '%';
-    fill.style.background = 'var(--cyan)';
-    setText('tl-label', `TEMPO TRASCORSO · ${pct}%`);
-    if (start) start.textContent = fmtDayTime(b.start);
-    if (end)   end.textContent   = fmtDayTime(b.end) + ' ↺';
+    updateWeeklyCompare();
     return;
   }
   if (!sessionResetTs) {
@@ -1134,11 +1170,64 @@ function weeklyPace() {
   return { ok: false, text: `A questo ritmo finisci ${fmtDayTime(exhaustTs)}, prima del reset`, projected };
 }
 
+// Confronto usato / tempo trascorso (aggiornato ogni secondo dal tick)
+function updateWeeklyCompare() {
+  const acc = DATA.account || {};
+  const b = weeklyBounds();
+  const used = acc.weekly_pct_used;
+  if (!b || used == null) return;
+  const nowTs = Math.floor(Date.now() / 1000);
+  const span = b.end - b.start;
+  const timeExact = Math.max(0, Math.min(100, (nowTs - b.start) / span * 100));
+  const timePct = Math.round(timeExact);
+  const usedColor = used < 50 ? 'var(--green)' : used < 75 ? 'var(--amber)' : 'var(--red)';
+
+  setText('wk-used-num', used + '%');
+  setStyle('wk-used-num', 'color', usedColor);
+  setText('wk-used-sub', `${100 - used}% rimasto`);
+  setText('wk-time-num', timePct + '%');
+  setText('wk-time-sub', nowTs < b.end ? `reset tra ${fmtDur(b.end - nowTs)} · ${fmtDayTime(b.end)}` : 'reset imminente');
+  setStyle('wk-bar-used', 'width', used + '%');
+  setStyle('wk-bar-used', 'background', usedColor);
+  setStyle('wk-bar-time', 'width', timePct + '%');
+  const mk = document.getElementById('wk-marker');
+  if (mk) mk.style.left = `calc(40px + (100% - 40px) * ${used / 100})`;
+
+  // Differenza in punti e in tempo
+  const d = used - timeExact;
+  const pts = Math.round(Math.abs(d));
+  const secs = Math.abs(d) / 100 * span;
+  const delta = document.getElementById('wk-delta');
+  let color, main, sub;
+  if (Math.abs(d) < 0.5) {
+    color = 'var(--green)'; main = 'In linea con il tempo'; sub = '';
+  } else if (d > 0) {
+    color = 'var(--amber)'; main = `+${pts} ${pts === 1 ? 'punto' : 'punti'} avanti al tempo`; sub = `≈ ${fmtDur(secs)} di anticipo`;
+  } else {
+    color = 'var(--green)'; main = `${pts} ${pts === 1 ? 'punto' : 'punti'} sotto al tempo`; sub = `≈ ${fmtDur(secs)} di margine`;
+  }
+  setText('wk-delta-main', main);
+  setStyle('wk-delta-main', 'color', color);
+  setText('wk-delta-sub', sub);
+  if (delta) {
+    const cs = getComputedStyle(document.documentElement);
+    const raw = cs.getPropertyValue(color.slice(4, -1)).trim();
+    delta.style.borderColor = color;
+    delta.style.background = raw.startsWith('#') ? hexToRgba(raw, 0.12) : 'transparent';
+  }
+
+  // Frase sul ritmo, sotto la differenza
+  const pace = weeklyPace();
+  const pe = document.getElementById('wk-pace');
+  if (pe && pace) {
+    pe.textContent = (pace.ok ? '✓ ' : '⚠ ') + pace.text;
+    pe.style.color = pace.ok ? 'var(--green)' : 'var(--amber)';
+  }
+}
+
 function renderWeeklyMode(acc) {
-  const w = acc.weekly_pct_used;
-  const colorVar = w < 50 ? '--green' : w < 75 ? '--amber' : '--red';
-  setGauge(w, colorVar);
   setText('gauge-label', 'SETTIMANA · TUTTI I MODELLI');
+  updateWeeklyCompare();
   setText('sp-label', 'UTILIZZO SETTIMANA · 7 GIORNI');
 
   // Credito sessioni cloud al posto del riquadro settimanale
@@ -1166,14 +1255,6 @@ function renderWeeklyMode(acc) {
   const ex = document.getElementById('weekly-extra');
   if (ex) {
     ex.textContent = '';
-    const pace = weeklyPace();
-    if (pace) {
-      const line = document.createElement('div');
-      line.className = 'we-pace';
-      line.style.color = pace.ok ? 'var(--green)' : 'var(--amber)';
-      line.textContent = (pace.ok ? '✓ ' : '⚠ ') + pace.text;
-      ex.appendChild(line);
-    }
     const chips = [];
     (acc.weekly_scoped || []).forEach(s => chips.push({ n: s.name, p: s.percent }));
     (acc.weekly_sources || []).slice().sort((a, b) => (b.percent || 0) - (a.percent || 0))
@@ -1709,6 +1790,13 @@ function renderNow() {
   const ext = document.getElementById('weekly-extra');
   if (ctl) ctl.style.display = weekly ? 'none' : '';
   if (ext) ext.style.display = weekly ? '' : 'none';
+  const show = (sel, on) => { const e = document.querySelector(sel); if (e) e.style.display = on ? '' : 'none'; };
+  show('.gauge-wrap', !weekly);
+  show('#countdown', !weekly);
+  show('.timeline-section', !weekly);
+  show('#wk-compare', weekly);
+  const wbox = document.getElementById('weekly-box');
+  if (wbox) wbox.style.marginTop = weekly ? 'auto' : '';
   const badge = document.getElementById('plan-badge');
   if (badge) { badge.textContent = acc.plan || ''; badge.style.display = acc.plan ? '' : 'none'; }
   if (weekly) {
